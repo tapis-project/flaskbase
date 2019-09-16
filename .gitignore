@@ -1,0 +1,14 @@
+*.pyc
+.project
+.pydevproject
+.idea/
+*passwords
+*.key
+*.crt
+*.cer
+*.vagrant
+*.iml
+*.pem
+
+db-data/
+*.log

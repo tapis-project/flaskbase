@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/schema#",
+  "$id": "http://github.com/tapis-project/tapisflask/schemas/configschema.json",
+  "type": "object",
+  "properties": {
+    "server": {
+      "type": "string",
+      "pattern": "dev|prod",
+      "default": "prod",
+      "description": "configures whether to run the development server or the production server."
+    },
+    "service_name": {
+      "type": "string",
+      "description": "The name of the service, such as 'apps', 'jobs', etc."
+    },
+    "log_level": {
+      "type": "string",
+      "pattern": "DEBUG|INFO|WARN|ERROR|CRITICAL",
+      "default": "ERROR",
+      "description": "the logging level to use for the service. "
+    },
+    "version": {
+      "type": "string",
+      "description": "The version string for the service, e.g., '3.24.1'.",
+      "default": "dev"
+    },
+    "log_file": {
+      "type": "string",
+      "default": "/home/tapis/service.log",
+      "description": "location of log file."
+    },
+    "tenants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The list of tenants that this service will serve requests for."
+    },
+    "use_sk": {
+      "type": "boolean",
+      "description": "Whether this tokens service should use an external Tapis Security Kernel for its auth. NOTE: This should always be TRUE in production",
+      "default": true
+    },
+    "dev_jwt_public_key": {
+      "type": "string",
+      "description": "The public key associated with the private key to use for signing JWTs in dev mode. NOTE: This should NOT be used in production",
+      "default": "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDJtGvK8P6tP+K35PIxh713Vw0ZecWNaK31Lkz7aSJJYKNZ4gpgS+5+5bRZCzoNs3DSho3wh2g6sipnvOzo35bIo2Pb6SJ3rk3/PJ6SsyR0bh0NF7oSDGVJvNCImZAWRXxh5HENnsfMxJZrVQR9ZDQaaZ9awccX9S2L2WVMMniZMwIDAQAB\n-----END PUBLIC KEY-----"
+    },
+    "dev_iss": {
+      "type": "string",
+      "description": "The URL to use for the 'iss' claim in dev mode. NOTE: This should NOT be used in production",
+      "default": "https://dev.api.tapis.io/tokens/v3"
+    }
+  },
+  "required": ["service_name", "tenants"]
+}
