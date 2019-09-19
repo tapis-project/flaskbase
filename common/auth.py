@@ -144,7 +144,7 @@ def validate_request_token():
         - AuthenticationError - if validation is not successful.
     :return:
     """
-    if not g.x_tapis_token:
+    if not hasattr(g, 'x_tapis_token'):
         raise errors.NoTokenError("No access token found in the request.")
     claims = validate_token(g.x_tapis_token)
     g.token_claims = claims
@@ -162,11 +162,14 @@ def validate_token(token):
     """
     # first, decode the token data to determine the tenant associated with the token. We are not able to
     # check the signature until we know which tenant, and thus, which public key, to use for validation.
+    if not token:
+        raise errors.NoTokenError("No Tapis access token found in the request.")
     try:
         data = jwt.decode(token, verify=False)
     except Exception as e:
         logger.debug(f"got exception trying to parse data from the access_token jwt; exception: {e}")
-        raise errors.AuthenticationError("could not parse the access token.")
+        raise errors.AuthenticationError("Could not parse the Tapis access token.")
+    logger.debug(f"got data from token: {data}")
     # get the tenant out of the jwt payload and get associated public key
     token_tenant_id = data['tenant_id']
     try:
@@ -176,6 +179,7 @@ def validate_token(token):
     except KeyError:
         raise errors.AuthenticationError("Unable to process Tapis token; no public key associated with the "
                                          "tenant_id.")
+    logger.debug(f"public_key_str: {public_key_str}")
     # try:
     #     pub_key = get_pub_rsa_key(public_key_str)
     # except Exception as e:

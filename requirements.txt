@@ -14,3 +14,4 @@ flask-cors
 openapi-core
 pyjwt
 pycrypto==2.6.1
+cryptography

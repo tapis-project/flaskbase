@@ -1,4 +1,5 @@
 import os
+import traceback
 
 # import flask.ext.restful.reqparse as reqparse
 from flask import jsonify, request
@@ -9,6 +10,8 @@ import yaml
 
 from .config import conf
 from .errors import BaseTapisError
+from common.logs import get_logger
+logger = get_logger(__name__)
 
 TAG = conf.version
 
@@ -65,6 +68,15 @@ def error(result=None, msg="Error processing the request.", request=request):
     return jsonify(d)
 
 def handle_error(exc):
+    if conf.show_traceback:
+        logger.debug(f"building traceback for {exc}")
+        try:
+            raise exc
+        except Exception:
+            response = error(msg=traceback.format_exc())
+            response.status_code = exc.code
+            return response
+
     if isinstance(exc, BaseTapisError):
         response = error(msg=exc.msg)
         response.status_code = exc.code
