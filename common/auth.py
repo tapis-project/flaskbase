@@ -32,8 +32,6 @@ def get_tenants():
             t = {'tenant_id': tenant,
                  'iss': conf.dev_iss,
                  'public_key': conf.dev_jwt_public_key,
-                 'default_access_token_ttl': conf.dev_default_access_token_ttl,
-                 'default_refresh_token_ttl': conf.dev_default_refresh_token_ttl,
                  }
             result.append(t)
 
