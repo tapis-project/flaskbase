@@ -11,7 +11,7 @@ gunicorn==19.9.0
 PyYAML
 jsonschema
 flask-cors
-openapi-core
+openapi-core==0.11.1
 pyjwt
 pycrypto==2.6.1
 cryptography
