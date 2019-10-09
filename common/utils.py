@@ -6,6 +6,7 @@ from flask import jsonify, request
 from werkzeug.exceptions import ClientDisconnected
 from flask_restful import Api, reqparse
 from openapi_core import create_spec
+import sqlalchemy
 import yaml
 
 from .config import conf
@@ -85,3 +86,24 @@ def handle_error(exc):
         response = error(msg='Unrecognized exception type: {}. Exception: {}'.format(type(exc), exc))
         response.status_code = 500
         return response
+
+def get_message_from_sql_exc(e):
+    """
+    Attempts to process a sqlalchemy exception and return a human-readable message.
+    :param e: An sqlalchemy exception
+    :return: (str) A human-readable messages.
+    """
+    logger.debug(f"Got exception trying to add tenant object to db; dir(e): {dir(e)}")
+    logger.debug(f"_message: {e._message()}; ******detail: {e.detail}")
+    try:
+        msg = e._message().split('DETAIL:')[1].strip()
+    except Exception as exp:
+        logger.debug(f"Got exception trying to parse the sqlalchema message; falling back to _message(). exp: {exp}")
+        try:
+            msg = e._message()
+        except Exception as exp2:
+            logger.debug(f"Got exception just trying to use the _message() function. exp2: {exp2}")
+            msg = "No extra details available."
+    if isinstance(e, sqlalchemy.exc.IntegrityError):
+        msg = f"This change would violate uniqueness constraints. Details: {msg}"
+    return msg
