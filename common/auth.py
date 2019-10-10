@@ -148,10 +148,10 @@ def validate_request_token():
         raise errors.NoTokenError("No access token found in the request.")
     claims = validate_token(g.x_tapis_token)
     g.token_claims = claims
-    g.username = claims.get('username')
-    g.tenant_id = claims.get('tenant_id')
-    g.account_type = claims.get('account_type')
-    g.delegation = claims.get('delegation')
+    g.username = claims.get('tapis/username')
+    g.tenant_id = claims.get('tapis/tenant_id')
+    g.account_type = claims.get('tapis/account_type')
+    g.delegation = claims.get('tapis/delegation')
 
 
 def validate_token(token):
@@ -171,7 +171,7 @@ def validate_token(token):
         raise errors.AuthenticationError("Could not parse the Tapis access token.")
     logger.debug(f"got data from token: {data}")
     # get the tenant out of the jwt payload and get associated public key
-    token_tenant_id = data['tenant_id']
+    token_tenant_id = data['tapis/tenant_id']
     try:
         public_key_str = get_tenant_config(token_tenant_id)['public_key']
     except errors.BaseTapisError:
