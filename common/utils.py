@@ -61,7 +61,7 @@ def ok(result, msg="The request was successful", request=request):
          'message': msg}
     return jsonify(d)
 
-def error(result=None, msg="Error processing the request.", request=request):
+def error(result=None, msg="Error processing the request."):
     d = {'result': result,
          'status': 'error',
          'version': TAG,
@@ -70,13 +70,17 @@ def error(result=None, msg="Error processing the request.", request=request):
 
 def handle_error(exc):
     if conf.show_traceback:
-        logger.debug(f"building traceback for {exc}")
+        logger.debug(f"building traceback for exception...")
+        logger.debug(f"the type of exc is: {type(exc)}")
         try:
             raise exc
         except Exception:
-            response = error(msg=traceback.format_exc())
-            response.status_code = exc.code
-            return response
+            logger.debug("caught the re-raised exception.")
+            try:
+                msg = traceback.format_exc()
+                logger.debug(f"got a msg variable; msg: {msg}")
+            except Exception as e:
+                logger.error(f"Got exception trying to format the exception! e: {e}")
 
     if isinstance(exc, BaseTapisError):
         response = error(msg=exc.msg)
