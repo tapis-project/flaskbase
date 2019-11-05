@@ -171,7 +171,11 @@ def validate_token(token):
         raise errors.AuthenticationError("Could not parse the Tapis access token.")
     logger.debug(f"got data from token: {data}")
     # get the tenant out of the jwt payload and get associated public key
-    token_tenant_id = data['tapis/tenant_id']
+    try:
+        token_tenant_id = data['tapis/tenant_id']
+    except KeyError:
+        raise errors.AuthenticationError("Unable to process Tapis token; could not parse the tenant_id. It is possible "
+                                         "the token is in a format no longer supported by the platform.")
     try:
         public_key_str = get_tenant_config(token_tenant_id)['public_key']
     except errors.BaseTapisError:
