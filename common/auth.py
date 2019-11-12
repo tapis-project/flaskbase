@@ -4,12 +4,17 @@ from Crypto.Hash import SHA256
 
 from flask import g, request
 import jwt
+from tapy.dyna import DynaTapy
 
 from common.config import conf
 from common import errors
-
 from common.logs import get_logger
 logger = get_logger(__name__)
+
+def get_tapy_client(tenant_id=None):
+    if not tenant_id:
+        return DynaTapy(base_url=conf.instance_base_url)
+
 
 def get_tenants():
     """
@@ -36,8 +41,13 @@ def get_tenants():
             result.append(t)
 
     else:
-        # TODO -- look up tenants in the tenants API, get the associated parameters (including sk location)
-        pass
+        t = get_tapy_client()
+        tenant_list = t.tenants.list_tenants()
+        for ten in tenant_list:
+            t = {'tenant_id':
+
+            }
+            result.append(t)
     return result
 
 # singleton object with all the tenant configurations, as a python dictionary:
@@ -184,11 +194,6 @@ def validate_token(token):
         raise errors.AuthenticationError("Unable to process Tapis token; no public key associated with the "
                                          "tenant_id.")
     logger.debug(f"public_key_str: {public_key_str}")
-    # try:
-    #     pub_key = get_pub_rsa_key(public_key_str)
-    # except Exception as e:
-    #     logger.error(f"got exception trying to create public RSA key object; e: {e} ")
-    #     raise errors.ServiceConfigError("Unable to process public key associated with tenant.")
     try:
         return jwt.decode(token, public_key_str, algorithm='RS256')
     except Exception as e:

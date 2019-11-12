@@ -11,8 +11,11 @@ RUN pip install -U --no-cache-dir pip && \
 # TODO -- eventually remove this
 RUN apt-get update && apt-get install -y vim
 
-# ----Add the common lib (eventually this could be a pip install)
+# ----Add the common lib (TODO -- eventually this could be a pip install)
 COPY common /usr/local/lib/python3.7/site-packages/common
+
+# ----Copy the pySDK lib as well (TODO -- eventually this could be a pip install)
+COPY tapy /usr/local/lib/python3.7/site-packages/tapy
 
 # set default threads for gunicorn
 ENV threads=3
