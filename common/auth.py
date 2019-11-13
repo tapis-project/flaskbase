@@ -11,10 +11,25 @@ from common import errors
 from common.logs import get_logger
 logger = get_logger(__name__)
 
-def get_tapy_client(tenant_id=None):
+def get_service_tapy_client(tenant_id=None, base_url=None):
+    """
+    Returns a Tapy client for the service using the service's configuration. If tenant_id is not passed, uses the first
+    tenant in the service's tenants configuration.
+    :param tenant_id: (str) The tenant_id associated with the tenant to configure the client with.
+    :param base_url: (str) The base URL for the tenant to configure the client with.
+    :return: (tapy.dyna.dynatapy.DynaTapy) A Tapy client object.
+    """
+    # if there is no tenant_id, use the instance base url configured for the service:
     if not tenant_id:
-        return DynaTapy(base_url=conf.instance_base_url)
-
+        tenant_id = conf.tenants[0]
+    if not base_url:
+        base_url = conf.instance_base_url
+    t = DynaTapy(base_url=base_url,
+                 tenant_id=tenant_id,
+                 username=conf.service_name,
+                 account_type='service')
+    t.get_tokens()
+    return t
 
 def get_tenants():
     """
@@ -41,11 +56,12 @@ def get_tenants():
             result.append(t)
 
     else:
-        t = get_tapy_client()
+        t = DynaTapy(base_url=conf.instance_base_url)
         tenant_list = t.tenants.list_tenants()
-        for ten in tenant_list:
-            t = {'tenant_id':
-
+        for tn in tenant_list:
+            t = {'tenant_id': tn.tenant_id,
+                 'iss': tn.token_service,
+                 'public_key': tn.public_key
             }
             result.append(t)
     return result
