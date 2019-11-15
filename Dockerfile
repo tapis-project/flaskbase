@@ -2,7 +2,7 @@
 # Base image for building Tapis API services in Python/flask
 from python:3.7
 
-RUN useradd tapis
+RUN useradd tapis -u 4872
 ADD requirements.txt /home/tapis/common-requirements.txt
 
 RUN pip install -U --no-cache-dir pip && \
