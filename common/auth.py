@@ -19,11 +19,11 @@ def get_service_tapy_client(tenant_id=None, base_url=None):
     :param base_url: (str) The base URL for the tenant to configure the client with.
     :return: (tapy.dyna.dynatapy.DynaTapy) A Tapy client object.
     """
-    # if there is no tenant_id, use the instance base url configured for the service:
+    # if there is no tenant_id, use the service_tenant_id and service_tenant_base_url configured for the service:
     if not tenant_id:
-        tenant_id = conf.tenants[0]
+        tenant_id = conf.service_tenant_id
     if not base_url:
-        base_url = conf.instance_base_url
+        base_url = conf.service_tenant_base_url
     t = DynaTapy(base_url=base_url,
                  tenant_id=tenant_id,
                  username=conf.service_name,
@@ -39,12 +39,6 @@ def get_tenants():
     # these are the tenant_id strings configured for the service -
     tenants_strings = conf.tenants
     result = []
-    # the tenants service is a special case, as it must be a) configured to serve all tenants and b) actually maintains
-    # the list of tenants in its own DB. in this case, we return the empty list since the tenants service will use direct
-    # db access to get necessary data.
-    if conf.service_name == 'tenants' and tenants_strings[0] == '*':
-        return result
-
     # in dev mode, services can be configured to not use the security kernel, in which case we must get
     # configuration for a "dev" tenant directly from the service configs:
     if not conf.use_sk:
@@ -54,10 +48,34 @@ def get_tenants():
                  'public_key': conf.dev_jwt_public_key,
                  }
             result.append(t)
-
+    # the tenants service is a special case, as it must be a) configured to serve all tenants and b) actually maintains
+    # the list of tenants in its own DB. in this case, we return the empty list since the tenants service will use direct
+    # db access to get necessary data.
+    if conf.service_name == 'tenants' and tenants_strings[0] == '*':
+        # NOTE: only in the case of the tenants service will we be able to import this function; so this import needs to
+        # stay guarded by the above IF statement.
+        from service.models import get_tenants as tenants_api_get_tenants
+        # in the case where the tenants api migrations are running, this call will fail with a sqlalchemy.exc.ProgrammingError
+        # because the tenants table will not exist yet.
+        logger.info("calling the tenants api's get_tenants() function...")
+        try:
+            result = tenants_api_get_tenants()
+            logger.info(f"Got {result} from the tenants API")
+            return result
+        except Exception as e:
+            logger.info("WARNING - got an exception trying to compute the tenants.. this better be the tenants migration container.")
+            return result
     else:
-        t = DynaTapy(base_url=conf.instance_base_url)
-        tenant_list = t.tenants.list_tenants()
+        # if we are here, this is not the tenants service and it is configured to use the SK, so we will try to get
+        # the list of tenants directly from the tenants service.
+        t = DynaTapy(base_url=conf.service_tenant_base_url)
+        try:
+            tenant_list = t.tenants.list_tenants()
+        except Exception as e:
+            logger.error(f"Got an exception trying to get the list of tenants. Exception: {e}")
+        if not type(tenant_list) == list:
+            logger.error(f"Did not get a list object from list_tenants(); got: {tenant_list}")
+        logger.debug(f"Tenants returned: {tenant_list}")
         for tn in tenant_list:
             t = {'tenant_id': tn.tenant_id,
                  'iss': tn.token_service,
@@ -66,11 +84,19 @@ def get_tenants():
             result.append(t)
     return result
 
+class Tenants(object):
+    def __init__(self):
+        self.tenants = get_tenants()
+
+    def reload_tenants(self):
+        self.tenants = get_tenants()
+
 # singleton object with all the tenant configurations, as a python dictionary:
 # NOTE: since this object is constructed once at service initialization, it can grown stale as new tenants are
 #       added. ideally, adding/modifying tenants would not require service restarts, but instead would send the services
 #       a message to reload their tenant objects.
-tenants = get_tenants()
+tenants = Tenants()
+
 
 def get_tenant_config(tenant_id):
     """
@@ -78,9 +104,21 @@ def get_tenant_config(tenant_id):
     :param tenant_id:
     :return:
     """
-    for tenant in tenants:
-        if tenant['tenant_id'] == tenant_id:
-            return tenant
+    def find_tenant():
+        for tenant in tenants.tenants:
+            if tenant['tenant_id'] == tenant_id:
+                return tenant
+        return None
+    t = find_tenant()
+    if t:
+        return t
+    # try one reload and then give up -
+    logger.debug(f"didn't find tenant with id {tenant_id}; going to reload tenants. Tenants list was: {tenants.tenants}")
+    tenants.reload_tenants()
+    logger.debug(f"tenants reloaded. Tenants list is now: {tenants.tenants}")
+    t = find_tenant()
+    if t:
+        return t
     raise errors.BaseTapisError("invalid tenant id.")
 
 def authn_and_authz(authn_callback=None, authz_callback=None):
@@ -205,6 +243,7 @@ def validate_token(token):
     try:
         public_key_str = get_tenant_config(token_tenant_id)['public_key']
     except errors.BaseTapisError:
+        logger.error(f"Did not find the public key in the tenant configs. tenants:{tenants}")
         raise errors.AuthenticationError("Unable to process Tapis token; unexpected tenant_id.")
     except KeyError:
         raise errors.AuthenticationError("Unable to process Tapis token; no public key associated with the "
