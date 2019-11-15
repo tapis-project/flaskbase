@@ -34,10 +34,15 @@
       "default": "/home/tapis/service.log",
       "description": "location of log file."
     },
-    "instance_base_url": {
+    "service_tenant_base_url": {
       "type": "string",
       "default": "https://dev.develop.tapis.io",
-      "description": "Base URL for the instance where this service will run. This will be the URL to use for retrieving tenant data and other basic configuration."
+      "description": "Base URL for the tenant where this service lives. This will be the URL to used for retrieving the service's Tapis token amd for retrieving initialization data such as tenant data and other basic configuration."
+    },
+    "service_tenant_id": {
+      "type": "string",
+      "default": "dev",
+      "description": "The tenant_id for the tenant where this service lives."
     },
     "tenants": {
       "type": "array",
@@ -59,7 +64,7 @@
     "dev_iss": {
       "type": "string",
       "description": "The URL to use for the 'iss' claim in dev mode. NOTE: This should NOT be used in production",
-      "default": "https://dev.api.tapis.io/tokens/v3"
+      "default": "https://dev.api.tapis.io/v3/tokens"
     }
   },
   "required": ["service_name", "tenants"]
