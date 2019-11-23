@@ -72,7 +72,10 @@ def get_tenants():
         try:
             tenant_list = t.tenants.list_tenants()
         except Exception as e:
-            logger.error(f"Got an exception trying to get the list of tenants. Exception: {e}")
+            msg = f"Got an exception trying to get the list of tenants. Exception: {e}"
+            print(msg)
+            logger.error(msg)
+            raise errors.BaseTapisError("Unable to retrieve tenants from the Tenants API.")
         if not type(tenant_list) == list:
             logger.error(f"Did not get a list object from list_tenants(); got: {tenant_list}")
         logger.debug(f"Tenants returned: {tenant_list}")
