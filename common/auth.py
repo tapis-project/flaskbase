@@ -48,6 +48,7 @@ def get_tenants():
                  'public_key': conf.dev_jwt_public_key,
                  }
             result.append(t)
+        return result
     # the tenants service is a special case, as it must be a) configured to serve all tenants and b) actually maintains
     # the list of tenants in its own DB. in this case, we return the empty list since the tenants service will use direct
     # db access to get necessary data.
