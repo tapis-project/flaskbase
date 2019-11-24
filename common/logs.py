@@ -23,12 +23,13 @@ def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     level = get_module_log_level(name)
     logger.setLevel(level)
-    handler = logging.FileHandler(conf.log_file)
-    handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(levelname)s: %(message)s '
-        '[in %(pathname)s:%(lineno)d]'
-    ))
-    handler.setLevel(level)
-    logger.addHandler(handler)
+    if not logger.hasHandlers():
+        handler = logging.FileHandler(conf.log_file)
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s '
+            '[in %(pathname)s:%(lineno)d]'
+        ))
+        handler.setLevel(level)
+        logger.addHandler(handler)
     logger.info("returning a logger set to level: {} for module: {}".format(level, name))
     return logger
