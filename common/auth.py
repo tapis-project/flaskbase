@@ -83,7 +83,12 @@ def get_tenants():
         for tn in tenant_list:
             t = {'tenant_id': tn.tenant_id,
                  'iss': tn.token_service,
-                 'public_key': tn.public_key
+                 'public_key': tn.public_key,
+                 'token_service': tn.token_service,
+                 'base_url': tn.base_url,
+                 'authenticator': tn.authenticator,
+                 'security_kernel': tn.security_kernel,
+                 'is_owned_by_associate_site': tn.is_owned_by_associate_site,
             }
             result.append(t)
     return result
