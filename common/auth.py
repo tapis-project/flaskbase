@@ -89,6 +89,7 @@ def get_tenants():
                  'authenticator': tn.authenticator,
                  'security_kernel': tn.security_kernel,
                  'is_owned_by_associate_site': tn.is_owned_by_associate_site,
+                 'allowable_x_tenant_ids': tn.allowable_x_tenant_ids,
             }
             result.append(t)
     return result
@@ -207,6 +208,35 @@ def add_headers():
     # a hash of the original user's access token. this can be used, for instance, to check if the original user's
     # access token has been revoked.
     g.x_tapis_user_token_hash = request.headers.get('X-Tapis-User-Token-Hash')
+
+
+def resolve_tenant_id_for_request():
+    """
+    Resolves the tenant associated with the request. Assumes the add_headers() and validate_request_token() functions
+    have been called to set attributes on the flask thread-local.
+
+    The high-level algorithm is as follows:
+
+    1) If the X-Tapis-Tenant header is set in the request, this is the tenant_id for the request;
+    If the X-Tapis-Token is provided in this case, it must be a service token for a tenant that is allowed
+    to set the id in the X-Tapis-Tenant header (i.e., be on the allowable_x_tenant_ids list for the service
+    tenant.
+
+    2) If the X-Tapis-Tenant header is not set, then the base_url for this request dictates the tenant_id. There
+    are two sub-cases:
+      2a) The base_url is the tenant's base URL, in which case the base_url will be in the tenant list,
+      2b) The base_url is the tenant's primary-site URL (this is the case when the associate site has forwarded
+          a request to the primary site) in which case the base_url will be of the form <tenant_id>.api.tapis.io
+      cf., https://confluence.tacc.utexas.edu/display/CIC/Authentication+Subsystem
+    :return:
+    """
+    if g.x_tapis_tenant and g.x_tapis_token:
+        # need to check:
+        # 1). token is a service token
+        # 2). tenant id value for x_tapis_token is in the allowable_x_tenant_ids list for service token tenant_id
+        # todo -
+        # if g.token_claims.tenant_id ....
+        pass
 
 
 def validate_request_token():
