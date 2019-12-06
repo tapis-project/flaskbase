@@ -108,25 +108,43 @@ class Tenants(object):
 tenants = Tenants()
 
 
-def get_tenant_config(tenant_id):
+def get_tenant_config(tenant_id=None, url=None):
     """
-    Return the config for a specific tenant_id from the tenants config.
-    :param tenant_id:
+    Return the config for a specific tenant_id from the tenants config based on either a tenant_id or a URL.
+    One or the other (but not both) must be passed.
+    :param tenant_id: (str) The tenant_id to match.
+    :param url: (str) The URL to use to match.
     :return:
     """
-    def find_tenant():
+    def find_tenant_from_id():
         for tenant in tenants.tenants:
             if tenant['tenant_id'] == tenant_id:
                 return tenant
         return None
-    t = find_tenant()
+
+    def find_tenant_from_url():
+        for tenant in tenants.tenants:
+            if url in tenant['base_url']
+                return tenant
+            # todo - also check the tenant's primary_site_url once that is added to the tenant registry and model...
+        return None
+
+    if tenant_id:
+        t = find_tenant_from_id()
+    elif url:
+        t = find_tenant_from_url()
+    else:
+        raise errors.BaseTapisError("Invalid call to get_tenant_config; either tenant_id or url must be passed.")
     if t:
         return t
     # try one reload and then give up -
     logger.debug(f"didn't find tenant with id {tenant_id}; going to reload tenants. Tenants list was: {tenants.tenants}")
     tenants.reload_tenants()
     logger.debug(f"tenants reloaded. Tenants list is now: {tenants.tenants}")
-    t = find_tenant()
+    if tenant_id:
+        t = find_tenant_from_id()
+    elif url:
+        t = find_tenant_from_url()
     if t:
         return t
     raise errors.BaseTapisError("invalid tenant id.")
@@ -234,9 +252,29 @@ def resolve_tenant_id_for_request():
         # need to check:
         # 1). token is a service token
         # 2). tenant id value for x_tapis_token is in the allowable_x_tenant_ids list for service token tenant_id
-        # todo -
-        # if g.token_claims.tenant_id ....
-        pass
+        if not g.token_claims.get('tapis/account_type') == 'service':
+            raise errors.PermissionsError('Setting X-Tapis-Tenant header and X-Tapis-Token requires a service token.')
+        allowable_x_tenant_ids = get_tenant_config(g.token_claims.get('tenant_id')).get('allowable_x_tenant_ids') or []
+        if g.x_tapis_tenant not in allowable_x_tenant_ids:
+            raise errors.PermissionsError('X-Tapis-Tenant header value is not allowed for the service token tenant.')
+        # validation has passed, so set the request tenant_id to the x_tapis_tenant:
+        g.request_tenant_id = g.x_tapis_tenant
+        return True
+    # in all other cases, the request's tenant_id is based on the base URL of the request:
+    flask_baseurl = request.base_url
+    # the flask_baseurl includes the protocol, port (if present) and contains the url path; examples:
+    #  http://localhost:5000/v3/oauth2/tenant;
+    #  https://dev.develop.tapis.io/v3/oauth2/tenant
+    request_tenant = get_tenant_config(url=flask_baseurl)
+    g.request_tenant_id = request_tenant['tenant_id']
+    # we need to check that the request's tenant_id matches the tenant_id in the token:
+    if g.x_tapis_token:
+        if not g.token_claims.get('tapis/tenant_id') == g.request_tenant_id:
+            raise errors.PermissionsError(f'The tenant_id claim in the token, '
+                                          f'{g.token_claims.get('tapis/tenant_id' does not match the URL tenant,' \
+                                                                                f', {g.request_tenant_id}.')
+
+
 
 
 def validate_request_token():
