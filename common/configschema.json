@@ -31,8 +31,7 @@
     },
     "log_file": {
       "type": "string",
-      "default": "/home/tapis/service.log",
-      "description": "location of log file."
+      "description": "Location of log file. If not set, STDOUT will be used."
     },
     "service_tenant_base_url": {
       "type": "string",

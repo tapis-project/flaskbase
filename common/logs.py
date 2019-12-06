@@ -24,7 +24,10 @@ def get_logger(name: str) -> logging.Logger:
     level = get_module_log_level(name)
     logger.setLevel(level)
     if not logger.hasHandlers():
-        handler = logging.FileHandler(conf.log_file)
+        if conf.log_file:
+            handler = logging.FileHandler(conf.log_file)
+        else:
+            handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(logging.Formatter(
             '%(asctime)s %(levelname)s: %(message)s '
             '[in %(pathname)s:%(lineno)d]'
