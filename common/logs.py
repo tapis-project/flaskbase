@@ -1,7 +1,7 @@
 """Set up the loggers for the system."""
 
 import logging
-
+import sys
 from .config import conf
 
 def get_module_log_level(name: str) -> str:
@@ -24,7 +24,7 @@ def get_logger(name: str) -> logging.Logger:
     level = get_module_log_level(name)
     logger.setLevel(level)
     if not logger.hasHandlers():
-        if conf.log_file:
+        if hasattr(conf, 'log_file'):
             handler = logging.FileHandler(conf.log_file)
         else:
             handler = logging.StreamHandler(sys.stdout)
