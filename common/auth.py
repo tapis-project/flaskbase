@@ -130,7 +130,7 @@ def get_tenant_config(tenant_id=None, url=None):
 
     def find_tenant_from_url():
         for tenant in tenants.tenants:
-            if url in tenant['base_url']:
+            if tenant['base_url'] in url:
                 return tenant
             # todo - also check the tenant's primary_site_url once that is added to the tenant registry and model...
         return None
@@ -143,6 +143,10 @@ def get_tenant_config(tenant_id=None, url=None):
         logger.debug(f"looking for tenant with tenant_id: {tenant_id}")
         t = find_tenant_from_id()
     elif url:
+        # convert URL from http:// to https://
+        if url.startswith('http://'):
+            url = url.strip('http://')
+            url = 'https://{}'.format(url)
         logger.debug(f"looking for tenant with URL: {url}")
         t = find_tenant_from_url()
     else:
