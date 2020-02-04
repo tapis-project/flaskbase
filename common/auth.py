@@ -11,7 +11,7 @@ from common import errors
 from common.logs import get_logger
 logger = get_logger(__name__)
 
-def get_service_tapy_client(tenant_id=None, base_url=None):
+def get_service_tapy_client(tenant_id=None, base_url=None, jwt=None):
     """
     Returns a Tapy client for the service using the service's configuration. If tenant_id is not passed, uses the first
     tenant in the service's tenants configuration.
@@ -73,7 +73,7 @@ def get_tenants():
             logger.info("WARNING - got an exception trying to compute the tenants.. this better be the tenants migration container.")
             return result
     else:
-        # if we are here, this is not the tenants service and it is configured to use the SK, so we will try to get
+        # if we are here, this is not the tenants service and it is configured to use the tenants API, so we will try to get
         # the list of tenants directly from the tenants service.
         t = DynaTapy(base_url=conf.service_tenant_base_url)
         try:
