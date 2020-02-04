@@ -55,6 +55,11 @@
       "description": "Whether this service should use an external Tapis Security Kernel for its auth. NOTE: This should always be TRUE in production",
       "default": true
     },
+    "use_tenants": {
+      "type": "boolean",
+      "description": "Whether this service should use an external Tapis Tenants API for retrieving the tenant registry. NOTE: This should always be TRUE in production",
+      "default": true
+    },
     "dev_jwt_public_key": {
       "type": "string",
       "description": "The public key associated with the private key to use for signing JWTs in dev mode. NOTE: This should NOT be used in production",
@@ -64,6 +69,11 @@
       "type": "string",
       "description": "The base URL to use for the dev tenant in dev mode. NOTE: This should NOT be used in production",
       "default": "https://dev.develop.tapis.io"
+    },
+    "dev_token_service": {
+      "type": "string",
+      "description": "The URL to the token service to use for the dev tenant in dev mode. NOTE: This should NOT be used in production",
+      "default": "https://dev.develop.tapis.io/v3/tokens"
     },
     "dev_authenticator": {
       "type": "string",

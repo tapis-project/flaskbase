@@ -41,7 +41,7 @@ def get_tenants():
     result = []
     # in dev mode, services can be configured to not use the security kernel, in which case we must get
     # configuration for a "dev" tenant directly from the service configs:
-    if not conf.use_sk:
+    if not conf.use_tenants:
         for tenant in tenants_strings:
             t = {'tenant_id': tenant,
                  'iss': conf.dev_iss,
