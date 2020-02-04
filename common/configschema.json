@@ -40,7 +40,7 @@
     },
     "service_tenant_id": {
       "type": "string",
-      "default": "dev",
+      "default": "master",
       "description": "The tenant_id for the tenant where this service lives."
     },
     "tenants": {
