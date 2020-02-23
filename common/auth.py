@@ -27,8 +27,10 @@ def get_service_tapy_client(tenant_id=None, base_url=None, jwt=None):
     t = DynaTapy(base_url=base_url,
                  tenant_id=tenant_id,
                  username=conf.service_name,
-                 account_type='service')
-    t.get_tokens()
+                 account_type='service',
+                 jwt=jwt)
+    if not jwt:
+        t.get_tokens()
     return t
 
 def get_tenants():
@@ -58,7 +60,7 @@ def get_tenants():
     # the tenants service is a special case, as it must be a) configured to serve all tenants and b) actually maintains
     # the list of tenants in its own DB. in this case, we return the empty list since the tenants service will use direct
     # db access to get necessary data.
-    if conf.service_name == 'tenants' and tenants_strings[0] == '*':
+    elif conf.service_name == 'tenants' and tenants_strings[0] == '*':
         # NOTE: only in the case of the tenants service will we be able to import this function; so this import needs to
         # stay guarded by the above IF statement.
         from service.models import get_tenants as tenants_api_get_tenants
@@ -75,6 +77,8 @@ def get_tenants():
     else:
         # if we are here, this is not the tenants service and it is configured to use the tenants API, so we will try to get
         # the list of tenants directly from the tenants service.
+        # NOTE: we intentionally create a new DynaTapy client with *no authentication* so that we can call the Tenants
+        # API even _before_ the SK is started up. If we pass a JWT, Tenants will try to
         t = DynaTapy(base_url=conf.service_tenant_base_url)
         try:
             tenant_list = t.tenants.list_tenants()
@@ -339,7 +343,7 @@ def validate_token(token):
     try:
         public_key_str = get_tenant_config(tenant_id=token_tenant_id)['public_key']
     except errors.BaseTapisError:
-        logger.error(f"Did not find the public key in the tenant configs. tenants:{tenants}")
+        logger.error(f"Did not find the public key for tenant_id {tenant_id} in the tenant configs.")
         raise errors.AuthenticationError("Unable to process Tapis token; unexpected tenant_id.")
     except KeyError:
         raise errors.AuthenticationError("Unable to process Tapis token; no public key associated with the "
