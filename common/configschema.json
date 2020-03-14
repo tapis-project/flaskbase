@@ -13,6 +13,11 @@
       "type": "string",
       "description": "The name of the service, such as 'apps', 'jobs', etc."
     },
+    "service_password": {
+      "type": "string",
+      "description": "The password for the service; used when calling the Tokens API to generate a service token.",
+      "default": "5kY6WyiGMaY0ev0tqda2YKefTom"
+    },
     "log_level": {
       "type": "string",
       "pattern": "DEBUG|INFO|WARN|ERROR|CRITICAL",
@@ -35,7 +40,7 @@
     },
     "service_tenant_base_url": {
       "type": "string",
-      "default": "https://dev.develop.tapis.io",
+      "default": "https://master.develop.tapis.io",
       "description": "Base URL for the tenant where this service lives. This will be the URL to used for retrieving the service's Tapis token amd for retrieving initialization data such as tenant data and other basic configuration."
     },
     "service_tenant_id": {
