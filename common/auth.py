@@ -154,17 +154,21 @@ class Tenants(object):
                 # todo - also check the tenant's primary_site_url once that is added to the tenant registry and model...
             return None
 
+        logger.debug(f"top of get_tenant_config; called with tenant_id: {tenant_id}; url: {url}")
         # allow for local development by checking for localhost:500 in the url; note: using 500, NOT 5000 since services
         # might be running on different 500x ports locally, e.g., 5000, 5001, 5002, etc..
         if url and 'http://localhost:500' in url:
+            logger.debug("http://localhost:500 in url; resolving tenant id to dev.")
             tenant_id = 'dev'
         if tenant_id:
             logger.debug(f"looking for tenant with tenant_id: {tenant_id}")
             t = find_tenant_from_id()
         elif url:
+            logger.debug(f"looking for tenant with url {url}")
             # convert URL from http:// to https://
             if url.startswith('http://'):
-                url = url.strip('http://')
+                logger.debug("url started with http://; stripping and replacing with https")
+                url = url[len('http://'):]
                 url = 'https://{}'.format(url)
             logger.debug(f"looking for tenant with URL: {url}")
             t = find_tenant_from_url()
