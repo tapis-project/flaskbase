@@ -293,8 +293,10 @@ def resolve_tenant_id_for_request(tenants=tenants):
       cf., https://confluence.tacc.utexas.edu/display/CIC/Authentication+Subsystem
     :return:
     """
+    logger.debug("top of resolve_tenant_id_for_request")
     add_headers()
     if g.x_tapis_tenant and g.x_tapis_token:
+        logger.debug("found x_tapis_tenant and x_tapis_token on the g object.")
         # need to check:
         # 1). token is a service token
         # 2). tenant id value for x_tapis_token is in the allowable_x_tenant_ids list for service token tenant_id
@@ -309,6 +311,7 @@ def resolve_tenant_id_for_request(tenants=tenants):
         g.request_tenant_base_url = request_tenant['base_url']
         return g.request_tenant_id
     # in all other cases, the request's tenant_id is based on the base URL of the request:
+    logger.debug("computing base_url based on the URL of the request...")
     flask_baseurl = request.base_url
     # the flask_baseurl includes the protocol, port (if present) and contains the url path; examples:
     #  http://localhost:5000/v3/oauth2/tenant;
@@ -318,6 +321,7 @@ def resolve_tenant_id_for_request(tenants=tenants):
     g.request_tenant_base_url = request_tenant['base_url']
     # we need to check that the request's tenant_id matches the tenant_id in the token:
     if g.x_tapis_token:
+        logger.debug("found x_tapis_token on g; making sure tenant claim inside token matches that of the base URL.")
         token_tenant_id = g.token_claims.get('tapis/tenant_id')
         if not token_tenant_id == g.request_tenant_id:
             raise errors.PermissionsError(f'The tenant_id claim in the token, '
@@ -371,7 +375,7 @@ def validate_token(token, tenants=tenants):
     try:
         public_key_str = tenants.get_tenant_config(tenant_id=token_tenant_id)['public_key']
     except errors.BaseTapisError:
-        logger.error(f"Did not find the public key for tenant_id {tenant_id} in the tenant configs.")
+        logger.error(f"Did not find the public key for tenant_id {token_tenant_id} in the tenant configs.")
         raise errors.AuthenticationError("Unable to process Tapis token; unexpected tenant_id.")
     except KeyError:
         raise errors.AuthenticationError("Unable to process Tapis token; no public key associated with the "
