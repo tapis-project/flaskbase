@@ -71,7 +71,7 @@ example, `tapis/tokens-api` or `tapis/tenants-api`. Here is a general template f
 
 ``` 
 
-* For services using Postgrres, create migration skeleton. Migrations are based on the `alembic` package and must be 
+* For services using Postgres, create migration skeleton. Migrations are based on the `alembic` package and must be 
 initialized. Run the following commands from a terminal: 
 
 ```
@@ -172,7 +172,7 @@ the `common.auth.authentication()` function can be used. This function does the 
       7. `g.x_tapis_tenant` - the value of the `X-Tapis-Tenant` header.
       8. `g.x_tapis_user` - the value of hte `X-Tapis-User` header.
       
-This function raises the followint exceptions:
+This function raises the following exceptions:
   1. `common.errors.NoTokenError` - if no token was found.
   2. `common.errors.AuthenticationError` - the token was invalid.
   
@@ -233,3 +233,20 @@ HTTP response returned to the user would be:
 }
 ``` 
 And the HTTP status code would be 400.
+
+Note that if your code (and, by extension, any code your code calls) raises an exception that does not descend
+from the `common.errors.BaseTapisError` then the HTTP response will still contain the 4-stanza JSON response above
+but the `message` field will contain "Unrecognized exception type.." to indicate that the exception was not a recognized
+exception. In general, your service should not raise exceptions of types other than `common.errors.BaseTapisError` and
+should instead handle all other exceptions and convert them to the appropriate Tapis Exceptions. This includes all
+exceptions from the Python standard library, such as KeyError, AttributeError, etc.
+
+For example, if code you are writing could raise a KeyError, you should catch that and then translate it appropriately.
+Of course, different KeyErrors in different situations could translate into a user error, a service error, etc.
+
+```
+try:
+    app_id = post_data['app_id']
+except KeyError:
+    raise errors.BadInputError(msg='The app_id paramter was missing. Please be sure to pass app_id.')   # <- decends from BaseTapisError
+``` 
