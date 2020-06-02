@@ -51,14 +51,16 @@ def extend_with_default(validator_class):
 
     def set_defaults(validator, properties, instance, schema):
         for property, subschema in properties.items():
-            # check for a default supplied in the jsonschem doc
-            if "default" in subschema:
-                instance.setdefault(property, subschema["default"])
+            default_set = False
             # add support for environment variables for type string variables
             if subschema["type"] == "string":
                 # environment variables override any default set in the jsonschema
                 if os.environ.get(property):
+                    default_set = True
                     instance.setdefault(property, os.environ.get(property))
+            # check for a default supplied in the jsonschem doc
+            if "default" in subschema and not default_set:
+                instance.setdefault(property, subschema["default"])
 
         for error in validate_properties(
             validator, properties, instance, schema,
