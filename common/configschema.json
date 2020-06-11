@@ -38,6 +38,12 @@
       "type": "string",
       "description": "Location of log file. If not set, STDOUT will be used."
     },
+    "log_filing_strategy": {
+      "type": "string",
+      "pattern": "split|combined",
+      "description": "Either all logs to one file (combined) or to split files (split). If no log file specified, STDOUT will still be used.",
+      "default": "combined"
+    },
     "service_tenant_base_url": {
       "type": "string",
       "default": "https://master.develop.tapis.io",
@@ -107,6 +113,17 @@
       "type": "string",
       "description": "The URL to use for the 'iss' claim in dev mode. NOTE: This should NOT be used in production",
       "default": "https://dev.api.tapis.io/v3/tokens"
+    }
+  },
+  "patternProperties": {
+    "^.*_log_level": {
+      "type": "string",
+      "pattern": "DEBUG|INFO|WARN|ERROR|CRITICAL",
+      "description": "the logging level to use for a specific module."
+    },
+    "^.*_log_file": {
+      "type": "string",
+      "description": "Location of specific module log file. If not used, global log file will be used."
     }
   },
   "required": ["service_name", "tenants"]

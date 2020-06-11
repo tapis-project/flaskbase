@@ -24,8 +24,12 @@ def get_logger(name: str) -> logging.Logger:
     level = get_module_log_level(name)
     logger.setLevel(level)
     if not logger.hasHandlers():
-        if hasattr(conf, 'log_file'):
-            handler = logging.FileHandler(conf.log_file)
+        if conf.log_filing_strategy == 'combined':
+            log_file = conf.get('log_file')
+        else:
+            log_file = conf.get(f'{name}_log_file') or conf.get('log_file')
+        if log_file:
+            handler = logging.FileHandler(log_file)
         else:
             handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(logging.Formatter(
