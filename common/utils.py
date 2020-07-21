@@ -18,7 +18,7 @@ TAG = conf.version
 
 spec_path = os.environ.get("TAPIS_API_SPEC_PATH", '/home/tapis/service/resources/openapi_v3.yml')
 try:
-    spec_dict = yaml.load(open(spec_path, 'r'))
+    spec_dict = yaml.safe_load(open(spec_path, 'r'))
     spec = create_spec(spec_dict)
 except Exception as e:
     msg = f"Could not find/parse API spec file at path: {spec_path}; additional information: {e}"

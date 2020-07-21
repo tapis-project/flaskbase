@@ -4,7 +4,7 @@ from Crypto.Hash import SHA256
 
 from flask import g, request
 import jwt
-from tapy.dyna import DynaTapy
+from tapipy.tapis import Tapis
 
 from common.config import conf
 from common import errors
@@ -17,19 +17,19 @@ def get_service_tapy_client(tenant_id=None, base_url=None, jwt=None):
     tenant in the service's tenants configuration.
     :param tenant_id: (str) The tenant_id associated with the tenant to configure the client with.
     :param base_url: (str) The base URL for the tenant to configure the client with.
-    :return: (tapy.dyna.dynatapy.DynaTapy) A Tapy client object.
+    :return: (tapipy.tapis.Tapis) A Tapipy client object.
     """
     # if there is no tenant_id, use the service_tenant_id and service_tenant_base_url configured for the service:
     if not tenant_id:
         tenant_id = conf.service_tenant_id
     if not base_url:
         base_url = conf.service_tenant_base_url
-    t = DynaTapy(base_url=base_url,
-                 tenant_id=tenant_id,
-                 username=conf.service_name,
-                 account_type='service',
-                 service_password=conf.service_password,
-                 jwt=jwt)
+    t = Tapis(base_url=base_url,
+              tenant_id=tenant_id,
+              username=conf.service_name,
+              account_type='service',
+              service_password=conf.service_password,
+              jwt=jwt)
     if not jwt:
         t.get_tokens()
     return t
@@ -101,9 +101,9 @@ class Tenants(object):
             logger.debug("this is not the tenants service; calling tenants API to get tenants...")
             # if we are here, this is not the tenants service and it is configured to use the tenants API, so we will try to get
             # the list of tenants directly from the tenants service.
-            # NOTE: we intentionally create a new DynaTapy client with *no authentication* so that we can call the Tenants
+            # NOTE: we intentionally create a new Tapis client with *no authentication* so that we can call the Tenants
             # API even _before_ the SK is started up. If we pass a JWT, Tenants will try to
-            t = DynaTapy(base_url=conf.service_tenant_base_url)
+            t = Tapis(base_url=conf.service_tenant_base_url)
             try:
                 tenant_list = t.tenants.list_tenants()
             except Exception as e:
@@ -214,6 +214,8 @@ def authn_and_authz(tenants=tenants, authn_callback=None, authz_callback=None):
         auth.authn_and_authz()
 
     """
+    logger.debug(tenants)
+    logger.debug("Am I actually alive?")
     authentication(tenants, authn_callback)
     authorization(authz_callback)
 
@@ -382,7 +384,9 @@ def validate_token(token, tenants=tenants):
                                          "tenant_id.")
     logger.debug(f"public_key_str: {public_key_str}")
     try:
-        return jwt.decode(token, public_key_str, algorithm='RS256')
+        it = jwt.decode(token, public_key_str)
+        logger.debug(f'heyooo: {it}')
+        return it
     except Exception as e:
         logger.debug(f"Got exception trying to decode token; exception: {e}")
         raise errors.AuthenticationError("Invalid Tapis token.")

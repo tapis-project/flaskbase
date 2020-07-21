@@ -14,10 +14,6 @@ RUN apt-get update && apt-get install -y vim
 # ----Add the common lib (TODO -- eventually this could be a pip install)
 COPY common /usr/local/lib/python3.7/site-packages/common
 
-# ----Copy the pySDK lib as well (TODO -- eventually this could be a pip install)
-#COPY tapy/tapy /usr/local/lib/python3.7/site-packages/tapy
-COPY tapy/tapy /home/tapis/tapy
-
 # set default threads for gunicorn
 ENV threads=3
 # set the FLASK_APP var to point to the api.py module in the default location
