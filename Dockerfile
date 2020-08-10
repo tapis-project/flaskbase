@@ -18,8 +18,10 @@ COPY common /usr/local/lib/python3.7/site-packages/common
 #COPY tapy/tapy /usr/local/lib/python3.7/site-packages/tapy
 COPY tapy/tapy /home/tapis/tapy
 
-# set default threads for gunicorn
+# set default worker class, workers, and threads for gunicorn
+ENV workerCls=gthread
 ENV threads=3
+
 # set the FLASK_APP var to point to the api.py module in the default location
 ENV FLASK_APP service/api.py
 
