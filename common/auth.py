@@ -113,7 +113,6 @@ class Tenants(object):
                 raise errors.BaseTapisError("Unable to retrieve tenants from the Tenants API.")
             if not type(tenant_list) == list:
                 logger.error(f"Did not get a list object from list_tenants(); got: {tenant_list}")
-            logger.debug(f"Tenants returned: {tenant_list}")
             for tn in tenant_list:
                 t = {'tenant_id': tn.tenant_id,
                      'iss': tn.token_service,
@@ -214,8 +213,6 @@ def authn_and_authz(tenants=tenants, authn_callback=None, authz_callback=None):
         auth.authn_and_authz()
 
     """
-    logger.debug(tenants)
-    logger.debug("Am I actually alive?")
     authentication(tenants, authn_callback)
     authorization(authz_callback)
 
@@ -232,7 +229,13 @@ def authentication(tenants=tenants, authn_callback=None):
 
     """
     add_headers()
-    validate_request_token(tenants)
+    try:
+        validate_request_token(tenants)
+    except errors.NoTokenError as e:
+        if authn_callback:
+            authn_callback()
+        else:
+            raise e
 
 def authorization(authz_callback=None):
     """Entry point for authorization. Use as follows:
