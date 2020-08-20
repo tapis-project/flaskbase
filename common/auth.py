@@ -11,9 +11,9 @@ from common import errors
 from common.logs import get_logger
 logger = get_logger(__name__)
 
-def get_service_tapy_client(tenant_id=None, base_url=None, jwt=None):
+def get_service_tapis_client(tenant_id=None, base_url=None, jwt=None):
     """
-    Returns a Tapy client for the service using the service's configuration. If tenant_id is not passed, uses the first
+    Returns a Tapis client for the service using the service's configuration. If tenant_id is not passed, uses the first
     tenant in the service's tenants configuration.
     :param tenant_id: (str) The tenant_id associated with the tenant to configure the client with.
     :param base_url: (str) The base URL for the tenant to configure the client with.

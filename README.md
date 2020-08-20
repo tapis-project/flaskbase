@@ -136,15 +136,15 @@ conform to the requirements specified in the configschema.json file. In particul
 same as that specified in the configchema.json file.
 
 * Making Service Requests:
-The `common.auth` package provides a function, `get_service_tapy_client` which can be used to get
+The `common.auth` package provides a function, `get_service_tapis_client` which can be used to get
 a pre-configured Tapis client for making service requests. A common technique is to fetch the service client in the
 `__init__.py` module so that it is created at service initialization and available via import throughout the rest
 of the service code. 
 
 Within `__init__.py`:
 ```
-from common.auth import get_service_tapy_client
-t = get_service_tapy_client()
+from common.auth import get_service_tapis_client
+t = get_service_tapis_client()
 ```
 From within any other service module:
 ```
