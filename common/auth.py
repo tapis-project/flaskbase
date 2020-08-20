@@ -4,32 +4,32 @@ from Crypto.Hash import SHA256
 
 from flask import g, request
 import jwt
-from tapy.dyna import DynaTapy
+from tapipy.tapis import Tapis
 
 from common.config import conf
 from common import errors
 from common.logs import get_logger
 logger = get_logger(__name__)
 
-def get_service_tapy_client(tenant_id=None, base_url=None, jwt=None):
+def get_service_tapis_client(tenant_id=None, base_url=None, jwt=None):
     """
-    Returns a Tapy client for the service using the service's configuration. If tenant_id is not passed, uses the first
+    Returns a Tapis client for the service using the service's configuration. If tenant_id is not passed, uses the first
     tenant in the service's tenants configuration.
     :param tenant_id: (str) The tenant_id associated with the tenant to configure the client with.
     :param base_url: (str) The base URL for the tenant to configure the client with.
-    :return: (tapy.dyna.dynatapy.DynaTapy) A Tapy client object.
+    :return: (tapipy.tapis.Tapis) A Tapipy client object.
     """
     # if there is no tenant_id, use the service_tenant_id and service_tenant_base_url configured for the service:
     if not tenant_id:
         tenant_id = conf.service_tenant_id
     if not base_url:
         base_url = conf.service_tenant_base_url
-    t = DynaTapy(base_url=base_url,
-                 tenant_id=tenant_id,
-                 username=conf.service_name,
-                 account_type='service',
-                 service_password=conf.service_password,
-                 jwt=jwt)
+    t = Tapis(base_url=base_url,
+              tenant_id=tenant_id,
+              username=conf.service_name,
+              account_type='service',
+              service_password=conf.service_password,
+              jwt=jwt)
     if not jwt:
         t.get_tokens()
     return t
@@ -101,9 +101,9 @@ class Tenants(object):
             logger.debug("this is not the tenants service; calling tenants API to get tenants...")
             # if we are here, this is not the tenants service and it is configured to use the tenants API, so we will try to get
             # the list of tenants directly from the tenants service.
-            # NOTE: we intentionally create a new DynaTapy client with *no authentication* so that we can call the Tenants
+            # NOTE: we intentionally create a new Tapis client with *no authentication* so that we can call the Tenants
             # API even _before_ the SK is started up. If we pass a JWT, Tenants will try to
-            t = DynaTapy(base_url=conf.service_tenant_base_url)
+            t = Tapis(base_url=conf.service_tenant_base_url)
             try:
                 tenant_list = t.tenants.list_tenants()
             except Exception as e:
@@ -113,7 +113,6 @@ class Tenants(object):
                 raise errors.BaseTapisError("Unable to retrieve tenants from the Tenants API.")
             if not type(tenant_list) == list:
                 logger.error(f"Did not get a list object from list_tenants(); got: {tenant_list}")
-            logger.debug(f"Tenants returned: {tenant_list}")
             for tn in tenant_list:
                 t = {'tenant_id': tn.tenant_id,
                      'iss': tn.token_service,
@@ -230,7 +229,13 @@ def authentication(tenants=tenants, authn_callback=None):
 
     """
     add_headers()
-    validate_request_token(tenants)
+    try:
+        validate_request_token(tenants)
+    except errors.NoTokenError as e:
+        if authn_callback:
+            authn_callback()
+        else:
+            raise e
 
 def authorization(authz_callback=None):
     """Entry point for authorization. Use as follows:
@@ -382,7 +387,9 @@ def validate_token(token, tenants=tenants):
                                          "tenant_id.")
     logger.debug(f"public_key_str: {public_key_str}")
     try:
-        return jwt.decode(token, public_key_str, algorithm='RS256')
+        it = jwt.decode(token, public_key_str)
+        logger.debug(f'heyooo: {it}')
+        return it
     except Exception as e:
         logger.debug(f"Got exception trying to decode token; exception: {e}")
         raise errors.AuthenticationError("Invalid Tapis token.")

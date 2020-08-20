@@ -6,6 +6,7 @@ configschema.json, in this repo, but services can update or override the schema 
 import json
 import jsonschema
 import os
+import re
 
 from .errors import BaseTapisError
 
@@ -75,6 +76,20 @@ def extend_with_default(validator_class):
 DefaultValidatingDraft7Validator = extend_with_default(jsonschema.Draft7Validator)
 
 
+def match_and_replace_env_variables(txt_to_match: str) -> str:
+    """
+    A function to look through a str for any instances of '$env{ * }. If an instance is located
+    the interior of the braces is compared to existing environment variables. If the variable exists
+    it is then subbed into the text allow users to substitute environment variables directly into
+    their configs.
+    """
+    environ_regex_pattern = re.compile(r'\$env\{(.*?)\}')
+    pattern_matches = environ_regex_pattern.findall(txt_to_match)
+    for matched_var in pattern_matches:
+        if os.environ.get(matched_var):
+            txt_to_match = txt_to_match.replace(f"$env{{{matched_var}}}", os.environ.get(matched_var))
+    return txt_to_match
+
 # now that we have the required API config schema, we need to validate it against the actual configs supplied
 # to the service.
 
@@ -108,12 +123,15 @@ class Config(dict):
         path = os.environ.get('TAPIS_CONFIG_PATH', '/home/tapis/config.json')
         if os.path.exists(path):
             try:
-                return json.load(open(path, 'r'))
+                with open(path, 'r') as config_raw:
+                    config_txt = config_raw.read()
+                    config_with_env = match_and_replace_env_variables(config_txt)
+                return json.loads(config_with_env)
             except Exception as e:
                 msg = f'Could not load configs from JSON file at: {path}. exception: {e}'
                 print(msg)
                 raise BaseTapisError(msg)
-
+                
     @classmethod
     def load_config(cls):
         """
@@ -130,5 +148,5 @@ class Config(dict):
             print(msg)
             raise BaseTapisError(msg)
         return file_config
-
+    
 conf = Config(Config.load_config())
