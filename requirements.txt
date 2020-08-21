@@ -15,4 +15,4 @@ openapi-core==0.11.1
 pyjwt
 pycrypto==2.6.1
 cryptography
-tapipy==.0.2.2
+tapipy==.0.2.3
