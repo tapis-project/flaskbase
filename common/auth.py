@@ -144,9 +144,11 @@ class Tenants(object):
         :return:
         """
         def find_tenant_from_id():
+            logger.debug(f"top of find_tenant_from_id for tenant_id: {tenant_id}")
             for tenant in self.tenants:
                 if tenant['tenant_id'] == tenant_id:
                     return tenant
+            logger.info(f"did not find tenant: {tenant_id}. self.tenants: {self.tenants}")
             return None
 
         def find_tenant_from_url():
@@ -180,7 +182,7 @@ class Tenants(object):
             return t
         # try one reload and then give up -
         logger.debug(f"did not find tenant; going to reload tenants. Tenants list was: {tenants.tenants}")
-        tenants.reload_tenants()
+        self.reload_tenants()
         logger.debug(f"tenants reloaded. Tenants list is now: {tenants.tenants}")
         if tenant_id:
             t = find_tenant_from_id()
