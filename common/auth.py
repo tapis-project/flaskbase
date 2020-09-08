@@ -11,7 +11,7 @@ from common import errors
 from common.logs import get_logger
 logger = get_logger(__name__)
 
-def get_service_tapis_client(tenant_id=None, base_url=None, jwt=None, resource_set='master', custom_spec_dict=None, download_latest_specs=False):
+def get_service_tapis_client(tenant_id=None, base_url=None, jwt=None, resource_set='tapipy', custom_spec_dict=None, download_latest_specs=False):
     """
     Returns a Tapis client for the service using the service's configuration. If tenant_id is not passed, uses the first
     tenant in the service's tenants configuration.
