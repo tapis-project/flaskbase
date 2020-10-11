@@ -4,14 +4,22 @@ from Crypto.Hash import SHA256
 
 from flask import g, request
 import jwt
-from tapipy.tapis import Tapis
+from tapipy.tapis import Tapis, TapisResult
 
 from common.config import conf
 from common import errors
 from common.logs import get_logger
 logger = get_logger(__name__)
 
-def get_service_tapis_client(tenant_id=None, base_url=None, jwt=None, resource_set='tapipy', custom_spec_dict=None, download_latest_specs=False):
+def get_service_tapis_client(tenant_id=None,
+                             base_url=None,
+                             jwt=None,
+                             # TODO -- revert once resouces are up oresource_setn github!!!!
+                             # resource_set='tapipy',
+                             resource_set='local',
+                             custom_spec_dict=None,
+                             download_latest_specs=False,
+                             tenants=None):
     """
     Returns a Tapis client for the service using the service's configuration. If tenant_id is not passed, uses the first
     tenant in the service's tenants configuration.
@@ -19,11 +27,14 @@ def get_service_tapis_client(tenant_id=None, base_url=None, jwt=None, resource_s
     :param base_url: (str) The base URL for the tenant to configure the client with.
     :return: (tapipy.tapis.Tapis) A Tapipy client object.
     """
-    # if there is no tenant_id, use the service_tenant_id and service_tenant_base_url configured for the service:
-    if not tenant_id:
-        tenant_id = conf.service_tenant_id
+    # if there is no base_url the primary_site_master_tenant_base_url configured for the service:
     if not base_url:
-        base_url = conf.service_tenant_base_url
+        base_url = conf.primary_site_master_tenant_base_url
+    # # the tenants api is a special case because it: a) only ever runs at the primary site and b) might start before the
+    # # SK or tokens service is ready; therefore, it will not have a token or a tenants id yet, and we need to not trigger
+    # # the tenant_id lookup at the end of this constructor, so we unset the base_url.
+    # if conf.service_name == 'tenants':
+    #     base_url = None
     t = Tapis(base_url=base_url,
               tenant_id=tenant_id,
               username=conf.service_name,
@@ -32,7 +43,8 @@ def get_service_tapis_client(tenant_id=None, base_url=None, jwt=None, resource_s
               jwt=jwt,
               resource_set=resource_set,
               custom_spec_dict=custom_spec_dict,
-              download_latest_specs=download_latest_specs)
+              download_latest_specs=download_latest_specs,
+              tenants=tenants)
     if not jwt:
         t.get_tokens()
     return t
@@ -60,76 +72,89 @@ class Tenants(object):
         :return:
         """
         logger.debug("top of get_tenants()")
-        # these are the tenant_id strings configured for the service -
-        tenants_strings = conf.tenants
-        result = []
-        # in dev mode, services can be configured to not use the security kernel, in which case we must get
-        # configuration for a "dev" tenant directly from the service configs:
-        if not conf.use_tenants:
-            logger.debug("use_tenants was False")
-            for tenant in tenants_strings:
-                t = {'tenant_id': tenant,
-                     'iss': conf.dev_iss,
-                     'public_key': conf.dev_jwt_public_key,
-                     'token_service': conf.dev_token_service,
-                     'base_url': conf.dev_base_url,
-                     'authenticator': conf.dev_authenticator,
-                     'security_kernel': conf.dev_security_kernel,
-                     'is_owned_by_associate_site': conf.dev_is_owned_by_associate_site,
-                     'allowable_x_tenant_ids': conf.dev_allowable_x_tenant_ids,
-                     }
-                self.extend_tenant(t)
-                result.append(t)
-            return result
+        # if this is the first time we are calling get_tenants, set the service_running_at_primary_site attribute.
+        if not hasattr(self, "service_running_at_primary_site"):
+            self.service_running_at_primary_site = False
+        sites = []
+        tenants = []
         # the tenants service is a special case, as it must be a) configured to serve all tenants and b) actually maintains
         # the list of tenants in its own DB. in this case, we return the empty list since the tenants service will use direct
         # db access to get necessary data.
-        elif conf.service_name == 'tenants' and tenants_strings[0] == '*':
-            logger.debug("this is the tenants service, pulling tenants from db...")
-            # NOTE: only in the case of the tenants service will we be able to import this function; so this import needs to
-            # stay guarded by the above IF statement.
-            from service.models import get_tenants as tenants_api_get_tenants
-            # in the case where the tenants api migrations are running, this call will fail with a sqlalchemy.exc.ProgrammingError
-            # because the tenants table will not exist yet.
-            logger.info("calling the tenants api's get_tenants() function...")
-            try:
-                result = tenants_api_get_tenants()
-                logger.info(f"Got {result} from the tenants API")
-                return result
-            except Exception as e:
-                logger.info(
-                    "WARNING - got an exception trying to compute the tenants.. this better be the tenants migration container.")
-                return result
+        if conf.service_name == 'tenants':
+            self.service_running_at_primary_site = True
+            return self.get_tenants_for_tenants_api()
         else:
-            logger.debug("this is not the tenants service; calling tenants API to get tenants...")
-            # if we are here, this is not the tenants service and it is configured to use the tenants API, so we will try to get
+            logger.debug("this is not the tenants service; calling tenants API to get sites and tenants...")
+            # if we are here, this is not the tenants service, so we will try to get
             # the list of tenants directly from the tenants service.
             # NOTE: we intentionally create a new Tapis client with *no authentication* so that we can call the Tenants
-            # API even _before_ the SK is started up. If we pass a JWT, Tenants will try to
-            t = Tapis(base_url=conf.service_tenant_base_url)
+            # API even _before_ the SK is started up. If we pass a JWT, the Tenants will try to validate it as part of
+            # handling our request, and this validation will fail if SK is not available.
+            t = Tapis(base_url=conf.primary_site_master_tenant_base_url, resource_set='local') # TODO -- remove resource_set='local'
             try:
-                tenant_list = t.tenants.list_tenants()
+                tenants = t.tenants.list_tenants()
+                sites = t.tenants.list_sites()
             except Exception as e:
-                msg = f"Got an exception trying to get the list of tenants. Exception: {e}"
-                print(msg)
+                msg = f"Got an exception trying to get the list of sites and tenants. Exception: {e}"
                 logger.error(msg)
-                raise errors.BaseTapisError("Unable to retrieve tenants from the Tenants API.")
-            if not type(tenant_list) == list:
-                logger.error(f"Did not get a list object from list_tenants(); got: {tenant_list}")
-            for tn in tenant_list:
-                t = {'tenant_id': tn.tenant_id,
-                     'iss': tn.token_service,
-                     'public_key': tn.public_key,
-                     'token_service': tn.token_service,
-                     'base_url': tn.base_url,
-                     'authenticator': tn.authenticator,
-                     'security_kernel': tn.security_kernel,
-                     'is_owned_by_associate_site': tn.is_owned_by_associate_site,
-                     'allowable_x_tenant_ids': tn.allowable_x_tenant_ids,
-                     }
+                raise errors.BaseTapisError("Unable to retrieve sites and tenants from the Tenants API.")
+            for t in tenants:
                 self.extend_tenant(t)
-                logger.debug(f"adding tenant: {t}")
-                result.append(t)
+                for s in sites:
+                    if hasattr(s, "primary") and s.primary:
+                        self.primry_site = s
+                        if s.site_id == conf.service_site_id:
+                            logger.debug(f"this service is running at the primary site: {s.site_id}")
+                            self.service_running_at_primary_site = True
+                    if s.site_id == t.site_id:
+                        t.site = s
+            return tenants
+
+    def get_tenants_for_tenants_api(self):
+        """
+        This method computes the tenants and sites for the tenants service only. Note that the tenants service is a
+        special case because it must retrieve the sites and tenants from its own DB, not from
+        """
+        logger.debug("this is the tenants service, pulling sites and tenants from db...")
+        # NOTE: only in the case of the tenants service will we be able to import this function; so this import needs to
+        # stay guarded in this method.
+        if not conf.service_name == 'tenants':
+            raise errors.BaseTapisError("get_tenants_for_tenants_api called by a service other than tenants.")
+        from service.models import get_tenants as tenants_api_get_tenants
+        from service.models import get_sites as tenants_api_get_sites
+        # in the case where the tenants api migrations are running, this call will fail with a sqlalchemy.exc.ProgrammingError
+        # because the tenants table will not exist yet.
+        sites = []
+        tenants = []
+        result = []
+        logger.info("calling the tenants api's get_sites() function...")
+        try:
+            sites = tenants_api_get_sites()
+        except Exception as e:
+            logger.info(
+                "WARNING - got an exception trying to compute the sites.. this better be the tenants migration container.")
+            return tenants
+        logger.info("calling the tenants api's get_tenants() function...")
+        try:
+            tenants = tenants_api_get_tenants()
+        except Exception as e:
+            logger.info(
+                "WARNING - got an exception trying to compute the tenants.. this better be the tenants migration container.")
+            return tenants
+        # for each tenant, look up its corresponding site record and save it on the tenant record--
+        for t in tenants:
+            # Remove datetime objects --
+            t.pop('create_time')
+            t.pop('last_update_time')
+            # convert the tenants to TapisResult objects, and then append the sites object.
+            tn = TapisResult(**t)
+            for s in sites:
+                if 'primary' in s.keys() and s['primary']:
+                    self.primry_site = TapisResult(**s)
+                if s['site_id'] == tn.site_id:
+                    tn.site = TapisResult(**s)
+                    result.append(tn)
+                    break
         return result
 
     def reload_tenants(self):
@@ -146,14 +171,18 @@ class Tenants(object):
         def find_tenant_from_id():
             logger.debug(f"top of find_tenant_from_id for tenant_id: {tenant_id}")
             for tenant in self.tenants:
-                if tenant['tenant_id'] == tenant_id:
-                    return tenant
+                try:
+                    if tenant.tenant_id == tenant_id:
+                        logger.debug(f"found tenant {tenant_id}")
+                        return tenant
+                except TypeError as e:
+                    logger.error(f"caught the type error: {e}")
             logger.info(f"did not find tenant: {tenant_id}. self.tenants: {self.tenants}")
             return None
 
         def find_tenant_from_url():
             for tenant in self.tenants:
-                if tenant['base_url'] in url:
+                if tenant.base_url in url:
                     return tenant
                 # todo - also check the tenant's primary_site_url once that is added to the tenant registry and model...
             return None
@@ -181,7 +210,7 @@ class Tenants(object):
         if t:
             return t
         # try one reload and then give up -
-        logger.debug(f"did not find tenant; going to reload tenants. Tenants list was: {tenants.tenants}")
+        logger.debug(f"did not find tenant; going to reload tenants.")
         self.reload_tenants()
         logger.debug(f"tenants reloaded. Tenants list is now: {tenants.tenants}")
         if tenant_id:
@@ -191,6 +220,57 @@ class Tenants(object):
         if t:
             return t
         raise errors.BaseTapisError("invalid tenant id.")
+
+    def get_base_url_for_service_request(self, tenant_id, service):
+        """
+        Get the base_url that should be used for a service request based on the tenant_id and the service
+        that to which the request is targeting.
+        """
+        logger.debug(f"top of get_base_url_for_service_request() for tenant_id: {tenant_id} and service: {service}")
+        tenant_config = self.get_tenant_config(tenant_id=tenant_id)
+        try:
+            # get the services hosted by the owning site of the tenant
+            site_services = tenant_config.site.services
+        except AttributeError:
+            logger.info("tenant_config had no site or services; setting site_service to [].")
+            site_services = []
+        # the SK and token services always use the same site as the site the service is running on --
+        if service == 'sk' or service == 'security' or service == 'tokens':
+            # if the site_id for the service is the same as the site_id for the request, use the tenant URL:
+            if conf.service_site_id == tenant_config.site_id:
+                base_url = tenant_config.base_url
+                logger.debug(f"service {service} was SK or tokens and tenant's site was the same as the configured site; "
+                             f"returning tenant's base_url: {base_url}")
+            else:
+                # otherwise, we use the primary site (NOTE: if we are here, the configured site_id is different from the
+                # tenant's owning site. this only happens when the running service is at the primary site; services at
+                # associate sites never handle requests for tenants they do not own.
+                try:
+                    base_url_template = self.primry_site.tenant_base_url_template
+                except AttributeError:
+                    raise errors.BaseTapisError(
+                        f"Could not compute the base_url for tenant {tenant_id} at the primary site."
+                        f"The primary site was missing the tenant_base_url_template attribute.")
+                base_url = base_url_template.replace('${tenant_id}', tenant_id)
+                logger.debug(f'base_url for {tenant_id} and {service} was: {base_url}')
+                return base_url
+        # if the service is hosted by the site, we use the base_url associated with the tenant --
+        if service in site_services:
+            base_url = tenant_config.base_url
+            logger.debug(f"service {service} was hosted at site; returning tenant's base_url: {base_url}")
+            return base_url
+        # otherwise, we use the primary site
+        try:
+            base_url_template = self.primry_site.tenant_base_url_template
+        except AttributeError:
+            raise errors.BaseTapisError(f"Could not compute the base_url for tenant {tenant_id} at the primary site."
+                                        f"The primary site was missing the tenant_base_url_template attribute.")
+        base_url = base_url_template.replace('${tenant_id}', tenant_id)
+        logger.debug(f'base_url for {tenant_id} and {service} was: {base_url}')
+        return base_url
+
+
+
 
 # singleton object with all the tenant data and automatic reload functionality.
 # services that override the base Tenants class with a custom class that implements the extend_tenant() method should
@@ -291,15 +371,13 @@ def resolve_tenant_id_for_request(tenants=tenants):
     The high-level algorithm is as follows:
 
     1) If the X-Tapis-Tenant header is set in the request, this is the tenant_id for the request;
-    If the X-Tapis-Token is provided in this case, it must be a service token for a tenant that is allowed
-    to set the id in the X-Tapis-Tenant header (i.e., be on the allowable_x_tenant_ids list for the service
-    tenant.
-
+    If the X-Tapis-Token is provided in this case, it must be a service token. The Tapis service should validate
+    aspects of service token usage by calling the validate_request_token() function.
     2) If the X-Tapis-Tenant header is not set, then the base_url for this request dictates the tenant_id. There
     are two sub-cases:
       2a) The base_url is the tenant's base URL, in which case the base_url will be in the tenant list,
       2b) The base_url is the tenant's primary-site URL (this is the case when the associate site has forwarded
-          a request to the primary site) in which case the base_url will be of the form <tenant_id>.api.tapis.io
+          a request to the primary site) in which case the base_url will be of the form <tenant_id>.tapis.io
       cf., https://confluence.tacc.utexas.edu/display/CIC/Authentication+Subsystem
     :return:
     """
@@ -307,14 +385,9 @@ def resolve_tenant_id_for_request(tenants=tenants):
     add_headers()
     if g.x_tapis_tenant and g.x_tapis_token:
         logger.debug("found x_tapis_tenant and x_tapis_token on the g object.")
-        # need to check:
-        # 1). token is a service token
-        # 2). tenant id value for x_tapis_token is in the allowable_x_tenant_ids list for service token tenant_id
+        # need to check token is a service token
         if not g.token_claims.get('tapis/account_type') == 'service':
             raise errors.PermissionsError('Setting X-Tapis-Tenant header and X-Tapis-Token requires a service token.')
-        allowable_x_tenant_ids = tenants.get_tenant_config(tenant_id=g.token_claims.get('tenant_id')).get('allowable_x_tenant_ids') or []
-        if g.x_tapis_tenant not in allowable_x_tenant_ids:
-            raise errors.PermissionsError('X-Tapis-Tenant header value is not allowed for the service token tenant.')
         # validation has passed, so set the request tenant_id to the x_tapis_tenant:
         g.request_tenant_id = g.x_tapis_tenant
         request_tenant = tenants.get_tenant_config(tenant_id=g.request_tenant_id)
@@ -351,12 +424,17 @@ def validate_request_token(tenants=tenants):
     if not hasattr(g, 'x_tapis_token'):
         raise errors.NoTokenError("No access token found in the request.")
     claims = validate_token(g.x_tapis_token, tenants)
+    # set basic variables on the flask thread-local
     g.token_claims = claims
     g.username = claims.get('tapis/username')
     g.tenant_id = claims.get('tapis/tenant_id')
     g.account_type = claims.get('tapis/account_type')
     g.delegation = claims.get('tapis/delegation')
     logger.debug(f"setting g.tenant_id: {g.tenant_id}; g.username: {g.username}")
+    # service tokens have some extra checks:
+    if claims.get('tapis/account_type') == 'service':
+        g.site_id = claims.get('tapis/site_id')
+        service_token_checks(claims, tenants)
 
 
 def validate_token(token, tenants=tenants):
@@ -368,6 +446,7 @@ def validate_token(token, tenants=tenants):
     """
     # first, decode the token data to determine the tenant associated with the token. We are not able to
     # check the signature until we know which tenant, and thus, which public key, to use for validation.
+    logger.debug("top of validate_token")
     if not token:
         raise errors.NoTokenError("No Tapis access token found in the request.")
     try:
@@ -383,21 +462,24 @@ def validate_token(token, tenants=tenants):
         raise errors.AuthenticationError("Unable to process Tapis token; could not parse the tenant_id. It is possible "
                                          "the token is in a format no longer supported by the platform.")
     try:
-        public_key_str = tenants.get_tenant_config(tenant_id=token_tenant_id)['public_key']
+        token_tenant = tenants.get_tenant_config(tenant_id=token_tenant_id)
+        public_key_str = token_tenant.public_key
     except errors.BaseTapisError:
         logger.error(f"Did not find the public key for tenant_id {token_tenant_id} in the tenant configs.")
         raise errors.AuthenticationError("Unable to process Tapis token; unexpected tenant_id.")
-    except KeyError:
+    except AttributeError:
         raise errors.AuthenticationError("Unable to process Tapis token; no public key associated with the "
                                          "tenant_id.")
-    logger.debug(f"public_key_str: {public_key_str}")
+    if not public_key_str:
+        raise errors.AuthenticationError("Could not find the public key for the tenant_id associated with the tenant.")
+    # check signature and decode
     try:
-        it = jwt.decode(token, public_key_str)
-        logger.debug(f'heyooo: {it}')
-        return it
+        claims = jwt.decode(token, public_key_str)
     except Exception as e:
         logger.debug(f"Got exception trying to decode token; exception: {e}")
         raise errors.AuthenticationError("Invalid Tapis token.")
+    # if the token is a service token (i.e., this is a service to service request), do additional checks:
+    return claims
 
 def get_pub_rsa_key(pub_key):
     """
@@ -406,3 +488,41 @@ def get_pub_rsa_key(pub_key):
     :return:
     """
     return RSA.importKey(pub_key)
+
+
+def service_token_checks(claims, tenants):
+    """
+    This function does additional checks when a service token is used to make a Tapis request.
+
+    """
+    logger.debug(f"top of service_token_checks; claims: {claims}")
+    # first check that the target_site claim in the token matches this service's site_id --
+    target_site_id = claims.get('tapis/target_site')
+    try:
+        service_site_id = conf.service_site_id
+    except AttributeError:
+        msg = "service configured without a site_id. Aborting."
+        logger.error(msg)
+        raise errors.BaseTapisError(msg)
+    if not target_site_id == service_site_id:
+        msg = f"token's target_site ({target_site_id}) does not match service's site_id ({service_site_id}."
+        logger.info(msg)
+        raise errors.AuthenticationError("Invalid service token; "
+                                         "target_site claim does not match this service's site_id.")
+    # check that this service should be fulfilling this request based on its site_id config --
+    # the X-Tapis-Tenant header is required for service requests; if it is not set, raise an error.
+    if not g.x_tapis_tenant:
+        raise errors.AuthenticationError("Invalid service request; X-Tapis-Tenant header missing.")
+    request_tenant = tenants.get_tenant_config(tenant_id=g.x_tapis_tenant)
+    site_id_for_request = request_tenant.site_id
+    # if the service's site_id is the same as the site for the request, the request is always allowed:
+    if service_site_id == site_id_for_request:
+        logger.debug("request is for the same site as the service; allowing request.")
+        return True
+    # otherwise, we only allow the primary site to handle requests for other sites, and only if the service is NOT
+    # on the site's list of services that it runs.
+    if not tenants.service_running_at_primary_site:
+        raise errors.AuthenticationError("Cross-site service requests are only allowed to the primary site.")
+    # make sure this service is not on the list of services deployed at the associate site --
+    if conf.service_name in request_tenant.site.services:
+        raise errors.AuthenticationError(f"The primary site does not handle requests to service {conf.service}")

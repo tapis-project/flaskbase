@@ -44,10 +44,15 @@
       "description": "Either all logs to one file (combined) or to split files (split). If no log file specified, STDOUT will still be used.",
       "default": "combined"
     },
-    "service_tenant_base_url": {
+    "primary_site_master_tenant_base_url": {
       "type": "string",
       "default": "https://master.develop.tapis.io",
-      "description": "Base URL for the tenant where this service lives. This will be the URL to used for retrieving the service's Tapis token amd for retrieving initialization data such as tenant data and other basic configuration."
+      "description": "Base URL for the master tenant of the primary site for this Tapis installation. This URL will be used at service initiailization, for retrieving sites and tenants data."
+    },
+    "service_site_id": {
+      "type": "string",
+      "default": "tacc",
+      "description": "The site_id for the site where this service runs."
     },
     "service_tenant_id": {
       "type": "string",
