@@ -30,11 +30,8 @@ def get_service_tapis_client(tenant_id=None,
     # if there is no base_url the primary_site_master_tenant_base_url configured for the service:
     if not base_url:
         base_url = conf.primary_site_master_tenant_base_url
-    # # the tenants api is a special case because it: a) only ever runs at the primary site and b) might start before the
-    # # SK or tokens service is ready; therefore, it will not have a token or a tenants id yet, and we need to not trigger
-    # # the tenant_id lookup at the end of this constructor, so we unset the base_url.
-    # if conf.service_name == 'tenants':
-    #     base_url = None
+    if not tenant_id:
+        tenant_id = conf.service_tenant_id
     t = Tapis(base_url=base_url,
               tenant_id=tenant_id,
               username=conf.service_name,
@@ -44,7 +41,8 @@ def get_service_tapis_client(tenant_id=None,
               resource_set=resource_set,
               custom_spec_dict=custom_spec_dict,
               download_latest_specs=download_latest_specs,
-              tenants=tenants)
+              tenants=tenants,
+              is_tapis_service=True)
     if not jwt:
         t.get_tokens()
     return t
@@ -269,8 +267,23 @@ class Tenants(object):
         logger.debug(f'base_url for {tenant_id} and {service} was: {base_url}')
         return base_url
 
-
-
+    def get_site_master_tenants_for_service(self):
+        """
+        Get all tenants for which this service might need to interact with.
+        """
+        # services running at the primary site must interact with all sites, so this list comprehension
+        # just pulls out the tenant's that are master tenant id's for some site.
+        logger.debug("top of get_site_master_tenants_for_service")
+        if self.service_running_at_primary_site:
+            master_tenants = [t.tenant_id for t in self.tenants if t.tenant_id == t.site.site_master_tenant_id]
+        # otherwise, this service is running at an associate site, so it only needs itself and the primary site.
+        else:
+            master_tenants = [conf.service_tenant_id]
+            for t in self.tenants:
+                if t.tenant_id == t.site.site_master_tenant_id and hasattr(t.site, 'primary') and t.site.primary:
+                    master_tenants.append(t.tenant_id)
+        logger.debug(f"site master tenants for service: {master_tenants}")
+        return master_tenants
 
 # singleton object with all the tenant data and automatic reload functionality.
 # services that override the base Tenants class with a custom class that implements the extend_tenant() method should
@@ -430,11 +443,13 @@ def validate_request_token(tenants=tenants):
     g.tenant_id = claims.get('tapis/tenant_id')
     g.account_type = claims.get('tapis/account_type')
     g.delegation = claims.get('tapis/delegation')
-    logger.debug(f"setting g.tenant_id: {g.tenant_id}; g.username: {g.username}")
     # service tokens have some extra checks:
     if claims.get('tapis/account_type') == 'service':
-        g.site_id = claims.get('tapis/site_id')
+        g.site_id = claims.get('tapis/target_site_id')
+        logger.debug(f"service account; setting g.site_id: {g.site_id}; g.tenant_id: {g.tenant_id}; g.username: {g.username}")
         service_token_checks(claims, tenants)
+    else:
+        logger.debug(f"not a service account; setting g.tenant_id: {g.tenant_id}; g.username: {g.username}")
 
 
 def validate_token(token, tenants=tenants):
@@ -523,6 +538,8 @@ def service_token_checks(claims, tenants):
     # on the site's list of services that it runs.
     if not tenants.service_running_at_primary_site:
         raise errors.AuthenticationError("Cross-site service requests are only allowed to the primary site.")
+    logger.debug("this service is running at the primary site.")
     # make sure this service is not on the list of services deployed at the associate site --
     if conf.service_name in request_tenant.site.services:
         raise errors.AuthenticationError(f"The primary site does not handle requests to service {conf.service}")
+    logger.debug("this service is NOT in the JWT tenant's owning site's set of services. allowing the request.")
