@@ -53,6 +53,8 @@ class Tenants(object):
     Class for managing the tenants available in the tenants registry, including metadata associated with the tenant.
     """
     def __init__(self):
+        self.primary_site = None
+        self.service_running_at_primary_site = None
         self.tenants = self.get_tenants()
 
     def extend_tenant(self, t):
@@ -73,18 +75,16 @@ class Tenants(object):
         # if this is the first time we are calling get_tenants, set the service_running_at_primary_site attribute.
         if not hasattr(self, "service_running_at_primary_site"):
             self.service_running_at_primary_site = False
-        sites = []
-        tenants = []
-        # the tenants service is a special case, as it must be a) configured to serve all tenants and b) actually maintains
-        # the list of tenants in its own DB. in this case, we return the empty list since the tenants service will use direct
-        # db access to get necessary data.
+        # the tenants service is a special case, as it must be a) configured to serve all tenants and b) actually
+        # maintains the list of tenants in its own DB. in this case, we call a special method to use the tenants service
+        # code that makes direct db access to get necessary data.
         if conf.service_name == 'tenants':
             self.service_running_at_primary_site = True
             return self.get_tenants_for_tenants_api()
         else:
             logger.debug("this is not the tenants service; calling tenants API to get sites and tenants...")
-            # if we are here, this is not the tenants service, so we will try to get
-            # the list of tenants directly from the tenants service.
+            # if this case, this is not the tenants service, so we will try to get
+            # the list of tenants by making API calls to the tenants service.
             # NOTE: we intentionally create a new Tapis client with *no authentication* so that we can call the Tenants
             # API even _before_ the SK is started up. If we pass a JWT, the Tenants will try to validate it as part of
             # handling our request, and this validation will fail if SK is not available.
@@ -100,7 +100,7 @@ class Tenants(object):
                 self.extend_tenant(t)
                 for s in sites:
                     if hasattr(s, "primary") and s.primary:
-                        self.primry_site = s
+                        self.primary_site = s
                         if s.site_id == conf.service_site_id:
                             logger.debug(f"this service is running at the primary site: {s.site_id}")
                             self.service_running_at_primary_site = True
@@ -122,7 +122,6 @@ class Tenants(object):
         from service.models import get_sites as tenants_api_get_sites
         # in the case where the tenants api migrations are running, this call will fail with a sqlalchemy.exc.ProgrammingError
         # because the tenants table will not exist yet.
-        sites = []
         tenants = []
         result = []
         logger.info("calling the tenants api's get_sites() function...")
@@ -130,14 +129,16 @@ class Tenants(object):
             sites = tenants_api_get_sites()
         except Exception as e:
             logger.info(
-                "WARNING - got an exception trying to compute the sites.. this better be the tenants migration container.")
+                "WARNING - got an exception trying to compute the sites.. "
+                "this better be the tenants migration container.")
             return tenants
         logger.info("calling the tenants api's get_tenants() function...")
         try:
             tenants = tenants_api_get_tenants()
         except Exception as e:
             logger.info(
-                "WARNING - got an exception trying to compute the tenants.. this better be the tenants migration container.")
+                "WARNING - got an exception trying to compute the tenants.. "
+                "this better be the tenants migration container.")
             return tenants
         # for each tenant, look up its corresponding site record and save it on the tenant record--
         for t in tenants:
@@ -148,7 +149,7 @@ class Tenants(object):
             tn = TapisResult(**t)
             for s in sites:
                 if 'primary' in s.keys() and s['primary']:
-                    self.primry_site = TapisResult(**s)
+                    self.primary_site = TapisResult(**s)
                 if s['site_id'] == tn.site_id:
                     tn.site = TapisResult(**s)
                     result.append(tn)
@@ -182,7 +183,9 @@ class Tenants(object):
             for tenant in self.tenants:
                 if tenant.base_url in url:
                     return tenant
-                # todo - also check the tenant's primary_site_url once that is added to the tenant registry and model...
+                base_url_at_primary_site = self.get_base_url_for_tenant_primary_site(tenant.tenant_id)
+                if base_url_at_primary_site in url:
+                    return tenant
             return None
 
         logger.debug(f"top of get_tenant_config; called with tenant_id: {tenant_id}; url: {url}")
@@ -243,13 +246,7 @@ class Tenants(object):
                 # otherwise, we use the primary site (NOTE: if we are here, the configured site_id is different from the
                 # tenant's owning site. this only happens when the running service is at the primary site; services at
                 # associate sites never handle requests for tenants they do not own.
-                try:
-                    base_url_template = self.primry_site.tenant_base_url_template
-                except AttributeError:
-                    raise errors.BaseTapisError(
-                        f"Could not compute the base_url for tenant {tenant_id} at the primary site."
-                        f"The primary site was missing the tenant_base_url_template attribute.")
-                base_url = base_url_template.replace('${tenant_id}', tenant_id)
+                base_url = self.get_base_url_for_tenant_primary_site(tenant_id)
                 logger.debug(f'base_url for {tenant_id} and {service} was: {base_url}')
                 return base_url
         # if the service is hosted by the site, we use the base_url associated with the tenant --
@@ -258,14 +255,21 @@ class Tenants(object):
             logger.debug(f"service {service} was hosted at site; returning tenant's base_url: {base_url}")
             return base_url
         # otherwise, we use the primary site
-        try:
-            base_url_template = self.primry_site.tenant_base_url_template
-        except AttributeError:
-            raise errors.BaseTapisError(f"Could not compute the base_url for tenant {tenant_id} at the primary site."
-                                        f"The primary site was missing the tenant_base_url_template attribute.")
-        base_url = base_url_template.replace('${tenant_id}', tenant_id)
+        base_url = self.get_base_url_for_tenant_primary_site(tenant_id)
         logger.debug(f'base_url for {tenant_id} and {service} was: {base_url}')
         return base_url
+
+    def get_base_url_for_tenant_primary_site(self, tenant_id):
+        """
+        Compute the base_url for a tenant owned by an associate site.
+        """
+        try:
+            base_url_template = self.primary_site.tenant_base_url_template
+        except AttributeError:
+            raise errors.BaseTapisError(
+                f"Could not compute the base_url for tenant {tenant_id} at the primary site."
+                f"The primary site was missing the tenant_base_url_template attribute.")
+        return base_url_template.replace('${tenant_id}', tenant_id)
 
     def get_site_master_tenants_for_service(self):
         """
@@ -378,8 +382,7 @@ def add_headers():
 
 def resolve_tenant_id_for_request(tenants=tenants):
     """
-    Resolves the tenant associated with the request. Assumes the add_headers() and validate_request_token() functions
-    have been called to set attributes on the flask thread-local.
+    Resolves the tenant associated with the request.
 
     The high-level algorithm is as follows:
 
@@ -448,7 +451,13 @@ def validate_request_token(tenants=tenants):
         g.site_id = claims.get('tapis/target_site_id')
         logger.debug(f"service account; setting g.site_id: {g.site_id}; g.tenant_id: {g.tenant_id}; g.username: {g.username}")
         service_token_checks(claims, tenants)
+    # user tokens must *not* set the X-Tapis-Tenant and X-Tapis_user headers
     else:
+        try:
+            if g.x_tapis_tenant or g.x_tapis_user:
+                raise errors.AuthenticationError("Invalid request; cannot set OBO headers with a user token.")
+        except AttributeError:
+            pass
         logger.debug(f"not a service account; setting g.tenant_id: {g.tenant_id}; g.username: {g.username}")
 
 
@@ -525,9 +534,11 @@ def service_token_checks(claims, tenants):
         raise errors.AuthenticationError("Invalid service token; "
                                          "target_site claim does not match this service's site_id.")
     # check that this service should be fulfilling this request based on its site_id config --
-    # the X-Tapis-Tenant header is required for service requests; if it is not set, raise an error.
+    # the X-Tapis-* (OBO) headers are required for service requests; if it is not set, raise an error.
     if not g.x_tapis_tenant:
         raise errors.AuthenticationError("Invalid service request; X-Tapis-Tenant header missing.")
+    if not g.x_tapis_user:
+        raise errors.AuthenticationError("Invalid service request; X-Tapis-User header missing.")
     request_tenant = tenants.get_tenant_config(tenant_id=g.x_tapis_tenant)
     site_id_for_request = request_tenant.site_id
     # if the service's site_id is the same as the site for the request, the request is always allowed:
