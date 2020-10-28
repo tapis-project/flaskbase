@@ -1,4 +1,4 @@
-import base64
+import sys
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
 
@@ -32,6 +32,12 @@ def get_service_tapis_client(tenant_id=None,
         base_url = conf.primary_site_master_tenant_base_url
     if not tenant_id:
         tenant_id = conf.service_tenant_id
+    if not tenants:
+        # the following would work to reference this module's tenants object, but we'll choose to raise
+        # an error instead; it could be that
+        # tenants = sys.modules[__name__].tenants
+        raise errors.BaseTapisError("As a Tapis service, passing in the appropriate tenants manager object"
+                                    "is required.")
     t = Tapis(base_url=base_url,
               tenant_id=tenant_id,
               username=conf.service_name,
@@ -242,6 +248,7 @@ class Tenants(object):
                 base_url = tenant_config.base_url
                 logger.debug(f"service {service} was SK or tokens and tenant's site was the same as the configured site; "
                              f"returning tenant's base_url: {base_url}")
+                return base_url
             else:
                 # otherwise, we use the primary site (NOTE: if we are here, the configured site_id is different from the
                 # tenant's owning site. this only happens when the running service is at the primary site; services at
@@ -407,7 +414,7 @@ def resolve_tenant_id_for_request(tenants=tenants):
         # validation has passed, so set the request tenant_id to the x_tapis_tenant:
         g.request_tenant_id = g.x_tapis_tenant
         request_tenant = tenants.get_tenant_config(tenant_id=g.request_tenant_id)
-        g.request_tenant_base_url = request_tenant['base_url']
+        g.request_tenant_base_url = request_tenant.base_url
         return g.request_tenant_id
     # in all other cases, the request's tenant_id is based on the base URL of the request:
     logger.debug("computing base_url based on the URL of the request...")
@@ -416,8 +423,8 @@ def resolve_tenant_id_for_request(tenants=tenants):
     #  http://localhost:5000/v3/oauth2/tenant;
     #  https://dev.develop.tapis.io/v3/oauth2/tenant
     request_tenant = tenants.get_tenant_config(url=flask_baseurl)
-    g.request_tenant_id = request_tenant['tenant_id']
-    g.request_tenant_base_url = request_tenant['base_url']
+    g.request_tenant_id = request_tenant.tenant_id
+    g.request_tenant_base_url = request_tenant.base_url
     # we need to check that the request's tenant_id matches the tenant_id in the token:
     if g.x_tapis_token:
         logger.debug("found x_tapis_token on g; making sure tenant claim inside token matches that of the base URL.")
