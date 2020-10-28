@@ -1,0 +1,121 @@
+{
+  "$id": "http://github.com/tapis-project/authenticator/configschema.json",
+  "$schema": "http://json-schema.org/schema#",
+  "properties": {
+    "sql_db_url": {
+      "type": "string",
+      "description": "URL to postgres db, including port and database.",
+      "default": "postgres:5432/authenticator"
+    },
+    "postgres_user": {
+      "type": "string",
+      "description": "user for the SQL db.",
+      "default": "authenticator"
+    },
+    "postgres_password": {
+      "type": "string",
+      "description": "password to the SQL db.",
+      "default": "d3fd6pAssw0rd"
+    },
+    "default_page_limit": {
+      "type": "integer",
+      "description": "The default maximum number of results to return for each listing endpoint.",
+      "default": 100
+    },
+    "populate_all_clients": {
+      "type": "boolean",
+      "description": "At start up, ensure the Token Webapp has clients for all tenants it is configured to serve.",
+      "default": true
+    },
+    "populate_dev_ldap": {
+      "type": "boolean",
+      "description": "At start up, ensure the test LDAP db is populated with an OU and set of user accounts for the dev tenant.",
+      "default": true
+    },
+    "dev_ldap_url": {
+      "type": "string",
+      "description": "full URL to the test LDAP db.",
+      "default": "ldap://ldap"
+    },
+    "dev_ldap_port": {
+      "type": "integer",
+      "description": "port for the test LDAP db.",
+      "default": 389
+    },
+    "dev_ldap_use_ssl": {
+      "type": "boolean",
+      "description": "Whether to use SSL for the test LDAP db.",
+      "default": false
+    },
+    "dev_ldap_tenants_base_dn": {
+      "type": "string",
+      "description": "Base DN for tenant OUs in the test LDAP db.",
+      "default": "dc=tapis"
+    },
+    "dev_ldap_user_dn": {
+      "type": "string",
+      "description": "Base DN for users within the dev tenant in the test LDAP db.",
+      "default": "ou=tenants.dev,dc=tapis"
+    },
+    "dev_ldap_bind_dn": {
+      "type": "string",
+      "description": "Bind DN for the test LDAP db.",
+      "default": "cn=admin,dc=tapis"
+    },
+    "dev_ldap_bind_credential": {
+      "type": "string",
+      "description": "Bind credential for the test LDAP db.",
+      "default": "a1r2c3HKvv0"
+    },
+    "dev_tacc_ldap_bind_credential": {
+      "type": "string",
+      "description": "Bind credential for testing the TACC LDAP db.",
+      "default": "Def@ult$"
+    },
+    "dev_token_service": {
+      "type": "string",
+      "description": "full URL to the tokens service to use when use_sk is False.",
+      "default": "https://dev.develop.tapis.io/v3/tokens"
+    },
+    "dev_client_id": {
+      "type": "string",
+      "description": "Test client id",
+      "default": "testclient"
+    },
+    "dev_client_key": {
+      "type": "string",
+      "description": "Test client key",
+      "default": "testclientkey"
+    },
+    "dev_client_callback": {
+      "type": "string",
+      "description": "Test client callback url",
+      "default": "/oauth2/webapp/callback"
+    },
+    "dev_client_display_name": {
+      "type": "string",
+      "description": "Test client display name",
+      "default": "The Test Client"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Base string for the Token Webapp client id's; the full client id for a given tenant will include the tenant id.",
+      "default": "CIC.tokenapp"
+    },
+    "client_key": {
+      "type": "string",
+      "description": "Base string for the Token Webapp client secrets.",
+      "default": "abcd12345zzzZ"
+    },
+    "client_callback": {
+      "type": "string",
+      "description": "URL path for the Token Webapp client callback url",
+      "default": "/v3/oauth2/webapp/callback"
+    },
+    "client_display_name": {
+      "type": "string",
+      "description": "The display name used by the Tapis Token Webapp",
+      "default": "Tapis Token Webapp"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+# Image: tapis/flaskbase-tests
+# Build: docker build -t tapis/flaskbase-tests -f Dockerfile-tests .
+# Run it:
+#    docker run -it --rm tapis/flaskbase-tests
+from tapis/flaskbase
+
+USER root
+RUN pip install pytest
+
+RUN mkdir /home/tapis/service
+ADD tests/tests.py /home/tapis/service/tests.py
+ADD tests/config-local-test1.json /home/tapis/config.json
+ADD tests/configschema.json /home/tapis/configschema.json
+
+WORKDIR /home/tapis
+
+# Permissions
+RUN chown -R tapis:tapis /home/tapis
+USER tapis
+
+# Testing
+ENTRYPOINT ["pytest", "/home/tapis/service/tests.py"]
+
