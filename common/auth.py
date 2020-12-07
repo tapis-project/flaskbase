@@ -14,9 +14,7 @@ logger = get_logger(__name__)
 def get_service_tapis_client(tenant_id=None,
                              base_url=None,
                              jwt=None,
-                             # TODO -- revert once resouces are up oresource_setn github!!!!
-                             # resource_set='tapipy',
-                             resource_set='local',
+                             resource_set='local', #todo -- change back to resource_set='tapipy'
                              custom_spec_dict=None,
                              download_latest_specs=False,
                              tenants=None):
@@ -27,9 +25,9 @@ def get_service_tapis_client(tenant_id=None,
     :param base_url: (str) The base URL for the tenant to configure the client with.
     :return: (tapipy.tapis.Tapis) A Tapipy client object.
     """
-    # if there is no base_url the primary_site_master_tenant_base_url configured for the service:
+    # if there is no base_url the primary_site_admin_tenant_base_url configured for the service:
     if not base_url:
-        base_url = conf.primary_site_master_tenant_base_url
+        base_url = conf.primary_site_admin_tenant_base_url
     if not tenant_id:
         tenant_id = conf.service_tenant_id
     if not tenants:
@@ -94,7 +92,7 @@ class Tenants(object):
             # NOTE: we intentionally create a new Tapis client with *no authentication* so that we can call the Tenants
             # API even _before_ the SK is started up. If we pass a JWT, the Tenants will try to validate it as part of
             # handling our request, and this validation will fail if SK is not available.
-            t = Tapis(base_url=conf.primary_site_master_tenant_base_url, resource_set='local') # TODO -- remove resource_set='local'
+            t = Tapis(base_url=conf.primary_site_admin_tenant_base_url, resource_set='local') # TODO -- remove resource_set='local'
             try:
                 tenants = t.tenants.list_tenants()
                 sites = t.tenants.list_sites()
@@ -278,23 +276,23 @@ class Tenants(object):
                 f"The primary site was missing the tenant_base_url_template attribute.")
         return base_url_template.replace('${tenant_id}', tenant_id)
 
-    def get_site_master_tenants_for_service(self):
+    def get_site_admin_tenants_for_service(self):
         """
         Get all tenants for which this service might need to interact with.
         """
         # services running at the primary site must interact with all sites, so this list comprehension
-        # just pulls out the tenant's that are master tenant id's for some site.
-        logger.debug("top of get_site_master_tenants_for_service")
+        # just pulls out the tenant's that are admin tenant id's for some site.
+        logger.debug("top of get_site_admin_tenants_for_service")
         if self.service_running_at_primary_site:
-            master_tenants = [t.tenant_id for t in self.tenants if t.tenant_id == t.site.site_master_tenant_id]
+            admin_tenants = [t.tenant_id for t in self.tenants if t.tenant_id == t.site.site_admin_tenant_id]
         # otherwise, this service is running at an associate site, so it only needs itself and the primary site.
         else:
-            master_tenants = [conf.service_tenant_id]
+            admin_tenants = [conf.service_tenant_id]
             for t in self.tenants:
-                if t.tenant_id == t.site.site_master_tenant_id and hasattr(t.site, 'primary') and t.site.primary:
-                    master_tenants.append(t.tenant_id)
-        logger.debug(f"site master tenants for service: {master_tenants}")
-        return master_tenants
+                if t.tenant_id == t.site.site_admin_tenant_id and hasattr(t.site, 'primary') and t.site.primary:
+                    admin_tenants.append(t.tenant_id)
+        logger.debug(f"site admin tenants for service: {admin_tenants}")
+        return admin_tenants
 
 # singleton object with all the tenant data and automatic reload functionality.
 # services that override the base Tenants class with a custom class that implements the extend_tenant() method should
