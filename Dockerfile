@@ -14,8 +14,13 @@ RUN apt-get update && apt-get install -y vim
 # ----Add the common lib (TODO -- eventually this could be a pip install)
 COPY common /usr/local/lib/python3.7/site-packages/common
 
+# TODO -- uncomment to install and test a local copy of tapipy
+#COPY tapipy /usr/local/lib/python3.7/site-packages/tapipy
+#RUN chmod -R a+rx /usr/local/lib/python3.7/site-packages/tapipy
+
 # set default worker class, workers, and threads for gunicorn
 ENV workerCls=gthread
+ENV processes=2
 ENV threads=3
 
 # set the FLASK_APP var to point to the api.py module in the default location
