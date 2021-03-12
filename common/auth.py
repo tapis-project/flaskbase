@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 def get_service_tapis_client(tenant_id=None,
                              base_url=None,
                              jwt=None,
-                             resource_set='local', #todo -- change back to resource_set='tapipy'
+                             resource_set='tapipy', #todo -- change back to resource_set='tapipy'
                              custom_spec_dict=None,
                              download_latest_specs=False,
                              tenants=None):
