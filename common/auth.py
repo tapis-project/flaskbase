@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 def get_service_tapis_client(tenant_id=None,
                              base_url=None,
                              jwt=None,
-                             resource_set='local', #todo -- change back to resource_set='tapipy'
+                             resource_set='tapipy', #todo -- change back to resource_set='tapipy'
                              custom_spec_dict=None,
                              download_latest_specs=False,
                              tenants=None):
@@ -226,47 +226,78 @@ class Tenants(object):
             return t
         raise errors.BaseTapisError("invalid tenant id.")
 
-    def get_base_url_for_service_request(self, tenant_id, service):
+    def get_base_url_admin_tenant_primary_site(self):
         """
-        Get the base_url that should be used for a service request based on the tenant_id and the service
-        that to which the request is targeting.
+        Returns the base URL for the admin tenants of the primary site.
+        :return:
         """
-        logger.debug(f"top of get_base_url_for_service_request() for tenant_id: {tenant_id} and service: {service}")
+        admin_tenant_id = self.primary_site.site_admin_tenant_id
+        return self.get_tenant_config(tenant_id=admin_tenant_id).base_url
+
+    def get_site_and_base_url_for_service_request(self, tenant_id, service):
+        """
+        Returns the site_id and base_url that should be used for a service request based on the tenant_id and the
+        service to which the request is targeting.
+
+        `tenant_id` should be the tenant that the object(s) of the request live in (i.e., the value of the
+        X-Tapis-Tenant header).  Note that in the case of service=tenants, the value of tenant_id id now
+        well defined and is ignored.
+
+        `service` should be the service being requested (e.g., apps, files, sk, tenants, etc.)
+
+        """
+        logger.debug(f"top of get_site_and_base_url_for_service_request() for tenant_id: {tenant_id} and service: {service}")
+        site_id_for_request = None
+        base_url = None
+        # requests to the tenants service should always go to the primary site
+        if service == 'tenants':
+            site_id_for_request = self.primary_site.site_id
+            base_url =self.get_base_url_admin_tenant_primary_site()
+            logger.debug(f"call to tenants API, returning site_id: {site_id_for_request}; base url: {base_url}")
+            return site_id_for_request, base_url
+
+        # the SK and token services always use the same site as the site the service is running on --
         tenant_config = self.get_tenant_config(tenant_id=tenant_id)
+        if service == 'sk' or service == 'security' or service == 'tokens':
+            site_id_for_request = conf.service_site_id
+            # if the site_id for the service is the same as the site_id for the request, use the tenant URL:
+            if conf.service_site_id == tenant_config.site_id:
+                base_url = tenant_config.base_url
+                logger.debug(f"service '{service}' is SK or tokens and tenant's site was the same as the "
+                             f"configured site; returning site_id: {site_id_for_request}; base_url: {base_url}")
+                return site_id_for_request, base_url
+            else:
+                # otherwise, we use the primary site (NOTE: if we are here, the configured site_id is different from the
+                # tenant's owning site. this only happens when the running service is at the primary site; services at
+                # associate sites never handle requests for tenants they do not own.
+                site_id_for_request = self.primary_site.site_id
+                base_url = self.get_base_url_for_tenant_primary_site(tenant_id)
+                logger.debug(f'request for {tenant_id} and {service}; returning site_id: {site_id_for_request}; '
+                             f'base URL: {base_url}')
+                return site_id_for_request, base_url
+        # if the service is hosted by the site, we use the base_url associated with the tenant --
         try:
             # get the services hosted by the owning site of the tenant
             site_services = tenant_config.site.services
         except AttributeError:
             logger.info("tenant_config had no site or services; setting site_service to [].")
             site_services = []
-        # the SK and token services always use the same site as the site the service is running on --
-        if service == 'sk' or service == 'security' or service == 'tokens':
-            # if the site_id for the service is the same as the site_id for the request, use the tenant URL:
-            if conf.service_site_id == tenant_config.site_id:
-                base_url = tenant_config.base_url
-                logger.debug(f"service {service} was SK or tokens and tenant's site was the same as the configured site; "
-                             f"returning tenant's base_url: {base_url}")
-                return base_url
-            else:
-                # otherwise, we use the primary site (NOTE: if we are here, the configured site_id is different from the
-                # tenant's owning site. this only happens when the running service is at the primary site; services at
-                # associate sites never handle requests for tenants they do not own.
-                base_url = self.get_base_url_for_tenant_primary_site(tenant_id)
-                logger.debug(f'base_url for {tenant_id} and {service} was: {base_url}')
-                return base_url
-        # if the service is hosted by the site, we use the base_url associated with the tenant --
         if service in site_services:
+            site_id_for_request = conf.service_site_id
             base_url = tenant_config.base_url
-            logger.debug(f"service {service} was hosted at site; returning tenant's base_url: {base_url}")
-            return base_url
+            logger.debug(f"service {service} was hosted at site; returning site_id: {site_id_for_request}; "
+                         f"tenant's base_url: {base_url}")
+            return site_id_for_request, base_url
         # otherwise, we use the primary site
+        site_id_for_request = self.primary_site.site_id
         base_url = self.get_base_url_for_tenant_primary_site(tenant_id)
-        logger.debug(f'base_url for {tenant_id} and {service} was: {base_url}')
-        return base_url
+        logger.debug(f'request was for {tenant_id} and {service}; returning site_id: {site_id_for_request};'
+                     f'base URL: {base_url}')
+        return site_id_for_request, base_url
 
     def get_base_url_for_tenant_primary_site(self, tenant_id):
         """
-        Compute the base_url for a tenant owned by an associate site.
+        Compute the base_url at the primary site for a tenant owned by an associate site.
         """
         try:
             base_url_template = self.primary_site.tenant_base_url_template
@@ -341,8 +372,10 @@ def authentication(tenants=tenants, authn_callback=None):
     except errors.NoTokenError as e:
         if authn_callback:
             authn_callback()
+            return
         else:
             raise e
+    resolve_tenant_id_for_request(tenants)
 
 def authorization(authz_callback=None):
     """Entry point for authorization. Use as follows:
@@ -387,7 +420,8 @@ def add_headers():
 
 def resolve_tenant_id_for_request(tenants=tenants):
     """
-    Resolves the tenant associated with the request.
+    Resolves the tenant associated with the request and sets it on the g.request_tenant_id variable. Additionally,
+    sets the g.request_tenant_base_url variable in the process. Returns the request_tenant_id (string).
 
     The high-level algorithm is as follows:
 
@@ -404,6 +438,8 @@ def resolve_tenant_id_for_request(tenants=tenants):
     """
     logger.debug("top of resolve_tenant_id_for_request")
     add_headers()
+    # if the x_tapis_tenant header was set, then this must be a request from a service account. in this case, the
+    # request_tenant_id will in general not match the tapis/tenant_id claim in the service token.
     if g.x_tapis_tenant and g.x_tapis_token:
         logger.debug("found x_tapis_tenant and x_tapis_token on the g object.")
         # need to check token is a service token
@@ -417,9 +453,29 @@ def resolve_tenant_id_for_request(tenants=tenants):
     # in all other cases, the request's tenant_id is based on the base URL of the request:
     logger.debug("computing base_url based on the URL of the request...")
     flask_baseurl = request.base_url
+    logger.debug(f"flask_baseurl: {flask_baseurl}")
     # the flask_baseurl includes the protocol, port (if present) and contains the url path; examples:
     #  http://localhost:5000/v3/oauth2/tenant;
     #  https://dev.develop.tapis.io/v3/oauth2/tenant
+    # in the local development case, the base URL (e.g., localhost:5000...) cannot be used to resolve the tenant id
+    # so instead we use the tenant_id claim within the x-tapis-token:
+    if 'http://172.17.0.1:' in flask_baseurl or 'http://localhost:' in flask_baseurl:
+        logger.warn("found 172.17.0.1 or localhost in flask_baseurl; we are assuming this is local development!!")
+        # some services, such as authenticator, have endpoints that do not receive tokens. in the local development
+        # case for these endpoints, we don't have a lot of good options -- we can't use the base URL or the token
+        # to determine the tenant, so we just set it to the "dev" tenant.
+        if not hasattr(g, 'token_claims'):
+            logger.warn("did not find a token_claims attribute in local development case. Can't use the URL, can't"
+                        "use the token. We have no option but to set the tenant to dev!!")
+            g.request_tenant_id = 'dev'
+            g.request_tenant_base_url = 'http://dev.develop.tapis.io'
+            return g.request_tenant_id
+        request_tenant = tenants.get_tenant_config(tenant_id=g.token_claims.get('tapis/tenant_id'))
+        g.request_tenant_id = request_tenant.tenant_id
+        g.request_tenant_base_url = request_tenant.base_url
+        return g.request_tenant_id
+    # otherwise we are not in the local development case, so use the request's base URL to determine the tenant id
+    # and make sure that tenant_id matches the tenant_id claim in the token.
     request_tenant = tenants.get_tenant_config(url=flask_baseurl)
     g.request_tenant_id = request_tenant.tenant_id
     g.request_tenant_base_url = request_tenant.base_url
