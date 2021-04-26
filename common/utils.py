@@ -54,18 +54,24 @@ def pretty_print(request):
         return True
     return False
 
-def ok(result, msg="The request was successful", request=request):
+def ok(result, msg="The request was successful", request=request, metadata={}):
+    if not isinstance(metadata, dict):
+        raise TypeError("Got exception formatting response. Metadata should be dict.")
     d = {'result': result,
          'status': 'success',
          'version': TAG,
-         'message': msg}
+         'message': msg,
+         'metadata': metadata}
     return jsonify(d)
 
-def error(result=None, msg="Error processing the request."):
+def error(result=None, msg="Error processing the request.", metadata={}):
+    if not isinstance(metadata, dict):
+        raise TypeError("Got exception formatting response. Metadata should be dict.")
     d = {'result': result,
          'status': 'error',
          'version': TAG,
-         'message': msg}
+         'message': msg,
+         'metadata': metadata}
     return jsonify(d)
 
 def handle_error(exc):
