@@ -68,12 +68,12 @@ def test_service_tokens_refresh(client):
     token_checks(client)
 
 
-def test_get_base_url_for_service_request(client):
-    assert client.tenant_cache.get_base_url_for_service_request(tenant_id='dev', service='tokens') \
-           == 'https://dev.develop.tapis.io'
-
-    assert client.tenant_cache.get_base_url_for_service_request(tenant_id='admin', service='tokens') \
-           == 'https://admin.develop.tapis.io'
+#def test_get_base_url_for_service_request(client):
+#    assert client.tenant_cache.get_base_url_for_service_request(tenant_id='dev', service='tokens') \
+#           == 'https://dev.develop.tapis.io'
+#
+#    assert client.tenant_cache.get_base_url_for_service_request(tenant_id='admin', service='tokens') \
+#           == 'https://admin.develop.tapis.io'
 
 
 def test_determine_x_tenant_for_request(client):
