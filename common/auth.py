@@ -1,3 +1,4 @@
+import datetime
 import sys
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
@@ -59,6 +60,11 @@ class Tenants(object):
     def __init__(self):
         self.primary_site = None
         self.service_running_at_primary_site = None
+        # this timedelta determines how frequently the code will refresh the tenants_cashe, looking for updates
+        # to the tenant definition. note that this configuration guarantees it will not refresh any MORE often than
+        # the configuration -- it only refreshes when it encoutners a tenant it does not recognize or it fails
+        # to validate the signature of an access token
+        self.update_tenant_cache_timedelta = datetime.timedelta(seconds=90)
         self.tenants = self.get_tenants()
 
     def extend_tenant(self, t):
@@ -84,7 +90,9 @@ class Tenants(object):
         # code that makes direct db access to get necessary data.
         if conf.service_name == 'tenants':
             self.service_running_at_primary_site = True
-            return self.get_tenants_for_tenants_api()
+            self.last_tenants_cache_update = datetime.datetime.now()
+            result = self.get_tenants_for_tenants_api()
+            return result
         else:
             logger.debug("this is not the tenants service; calling tenants API to get sites and tenants...")
             # if this case, this is not the tenants service, so we will try to get
@@ -94,6 +102,7 @@ class Tenants(object):
             # handling our request, and this validation will fail if SK is not available.
             t = Tapis(base_url=conf.primary_site_admin_tenant_base_url, resource_set='local') # TODO -- remove resource_set='local'
             try:
+                self.last_tenants_cache_update = datetime.datetime.now()
                 tenants = t.tenants.list_tenants()
                 sites = t.tenants.list_sites()
             except Exception as e:
@@ -449,6 +458,7 @@ def resolve_tenant_id_for_request(tenants=tenants):
         g.request_tenant_id = g.x_tapis_tenant
         request_tenant = tenants.get_tenant_config(tenant_id=g.request_tenant_id)
         g.request_tenant_base_url = request_tenant.base_url
+        # todo -- compute and set g.request_site_id
         return g.request_tenant_id
     # in all other cases, the request's tenant_id is based on the base URL of the request:
     logger.debug("computing base_url based on the URL of the request...")
@@ -473,12 +483,14 @@ def resolve_tenant_id_for_request(tenants=tenants):
         request_tenant = tenants.get_tenant_config(tenant_id=g.token_claims.get('tapis/tenant_id'))
         g.request_tenant_id = request_tenant.tenant_id
         g.request_tenant_base_url = request_tenant.base_url
+        # todo -- compute and set g.request_site_id
         return g.request_tenant_id
     # otherwise we are not in the local development case, so use the request's base URL to determine the tenant id
     # and make sure that tenant_id matches the tenant_id claim in the token.
     request_tenant = tenants.get_tenant_config(url=flask_baseurl)
     g.request_tenant_id = request_tenant.tenant_id
     g.request_tenant_base_url = request_tenant.base_url
+    # todo -- compute and set g.request_site_id
     # we need to check that the request's tenant_id matches the tenant_id in the token:
     if g.x_tapis_token:
         logger.debug("found x_tapis_token on g; making sure tenant claim inside token matches that of the base URL.")
@@ -558,11 +570,22 @@ def validate_token(token, tenants=tenants):
     if not public_key_str:
         raise errors.AuthenticationError("Could not find the public key for the tenant_id associated with the tenant.")
     # check signature and decode
-    try:
-        claims = jwt.decode(token, public_key_str)
-    except Exception as e:
-        logger.debug(f"Got exception trying to decode token; exception: {e}")
-        raise errors.AuthenticationError("Invalid Tapis token.")
+    tries = 0
+    while tries < 2:
+        tries = tries + 1
+        try:
+            claims = jwt.decode(token, public_key_str)
+        except Exception as e:
+            # if we get an exception decoding it could be that the tenant's public key has changed (i.e., that
+            # the public key in out tenant_cache is stale. if we haven't updated the tenant_cache in the last
+            # update_tenant_cache_timedelta then go ahead and update and try the decode again.
+            if ( (datetime.datetime.now() > tenants.last_tenants_cache_update + tenants.update_tenant_cache_timedelta)
+                    and tries == 1):
+                tenants.get_tenants()
+                continue
+            # otherwise, we were using a recent public key, so just fail out.
+            logger.debug(f"Got exception trying to decode token; exception: {e}")
+            raise errors.AuthenticationError("Invalid Tapis token.")
     # if the token is a service token (i.e., this is a service to service request), do additional checks:
     return claims
 
