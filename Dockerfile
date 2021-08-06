@@ -32,5 +32,3 @@ COPY service_entry.sh /home/tapis/entry.sh
 RUN chmod +x /home/tapis/entry.sh
 
 CMD ["./entry.sh"]
-
-
