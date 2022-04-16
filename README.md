@@ -1,3 +1,7 @@
+# This repository has been DEPRECATED.#
+
+Use the tapipy-tapisservice repository instead. 
+
 # flaskbase
 
 Core Python library for building Tapis v3 APIs using Python/flask. This library provides Python modules, Dockerfiles
